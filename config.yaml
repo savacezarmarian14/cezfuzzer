@@ -1,0 +1,51 @@
+network:
+  subnet: "192.168.100.0/24"
+  gateway: "192.168.100.3"
+
+entities:
+  client:
+    - name: client
+      type: fuzzed
+      ip: "192.168.100.2"
+      protocol: "tcp"
+      port: 9000
+      depends_on: ["fuzzer"]
+      docker:
+        image: "fuzz_base"
+        mount: "./build/test_src/tcp_client:/app/binary"
+        workdir: "/app"
+        cmd: "/app/binary"
+        args:
+          - "192.168.100.1"
+          - "9000"
+
+  fuzzer:
+    - name: fuzzer
+      type: fuzzer
+      ip: "192.168.100.3"
+      protocol: "tcp"
+      port: 9000
+      depends_on: ["server"]
+      fuzzed_entities: ["client", "server"]
+      docker:
+        image: "fuzz_base"
+        mount: "./build/src/test1-fuzzer:/app/binary"
+        workdir: "/app"
+        cmd: "/app/binary"
+        args:
+          - "9000"
+          - "192.168.100.1"
+
+  server:
+    - name: server
+      type: fuzzed
+      ip: "192.168.100.1"
+      protocol: "tcp"
+      port: 9000
+      docker:
+        image: "fuzz_base"
+        mount: "./build/test_src/tcp_server:/app/binary"
+        workdir: "/app"
+        cmd: "/app/binary"
+        args:
+          - "9000"
