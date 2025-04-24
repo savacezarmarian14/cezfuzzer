@@ -1,0 +1,17 @@
+# Use a slim Python base image (can be changed per project)
+FROM python:3.9-slim
+
+# Set working directory inside the container
+WORKDIR /app
+
+# Copy all project files into container
+COPY . /app
+
+# Install tools like iptables if needed
+RUN apt-get update && apt-get install -y iptables iproute2
+
+# Optional iptables rules (inserted dynamically)
+RUN iptables -t nat -A OUTPUT -d 192.168.1.10 -p udp --dport 5000 -j DNAT --to-destination 192.168.1.40:5000
+
+# Default execution command (inserted dynamically)
+CMD ['python3', '/app/tests/udp_inifinite_loop/main.py']

@@ -1,0 +1,17 @@
+# Use a slim Python base image (can be changed per project)
+FROM python:3.9-slim
+
+# Set working directory inside the container
+WORKDIR /app
+
+# Copy all project files into container
+COPY . /app
+
+# Install tools like iptables if needed
+RUN apt-get update && apt-get install -y iptables iproute2
+
+# Optional iptables rules (inserted dynamically)
+
+
+# Default execution command (inserted dynamically)
+CMD ['/app/bin/fuzzer_1']

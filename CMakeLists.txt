@@ -1,10 +1,11 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 project(cezfuzzer)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_subdirectory(test_src)
+# Add the subdirectory containing the proxy application
+add_subdirectory(proxy)
 
-# Dacă vrei să adaugi mai târziu logică principală:
-add_subdirectory(src)
+# Optionally add commander/ if it becomes a C++ component
+# add_subdirectory(commander)

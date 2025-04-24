@@ -1,60 +1,49 @@
 #!/bin/bash
 
-set -e  # Exit on error
-
 BUILD_DIR="build"
 
-function build() {
-    echo "[INFO] Starting build..."
-    if [ ! -d "$BUILD_DIR" ]; then
-        mkdir "$BUILD_DIR"
-        echo "[INFO] Created build directory."
-    fi
-    cd "$BUILD_DIR"
-    echo "[INFO] Running CMake..."
+show_help() {
+    echo "Usage: ./build.sh [OPTION]"
+    echo ""
+    echo "Options:"
+    echo "  --build      Build the project (default if no option is given)"
+    echo "  --clean      Remove the build directory"
+    echo "  --rebuild    Clean and then build the project"
+    echo "  --help       Show this help message"
+}
+
+build_project() {
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
     cmake ..
-    echo "[INFO] Building project..."
     make -j$(nproc)
-    echo "[SUCCESS] Build complete. Executables are in ./build/"
+    cd ..
 }
 
-function docker_build() {
-    echo "[INFO] Building Docker image 'fuzz_base'..."
-    sudo docker build -t fuzz_base .
-    echo "[SUCCESS] Docker image 'fuzz_base' built."
+clean_project() {
+    echo "Cleaning build directory..."
+    rm -rf $BUILD_DIR
 }
 
-function clean() {
-    echo "[INFO] Cleaning build directory..."
-    rm -rf "$BUILD_DIR"
-    echo "[SUCCESS] Cleaned."
-}
-
-function status() {
-    echo "[INFO] Showing Docker container status..."
-    docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-}
-
-# Main
+# Parse argument
 case "$1" in
-    build)
-        build
+    "" | --build)
+        echo "[BUILD] Building the project..."
+        build_project
         ;;
-    clean)
-        clean
+    --clean)
+        clean_project
         ;;
-    docker_build)
-        docker_build
+    --rebuild)
+        clean_project
+        echo "[REBUILD] Rebuilding the project..."
+        build_project
         ;;
-    status)
-        status
-        ;;
-    build_all)
-        docker_build
-        build
+    --help)
+        show_help
         ;;
     *)
-        echo "Usage: $0 {build|docker_build|build_all|clean|status}"
-        exit 1
+        echo "Unknown option: $1"
+        show_help
         ;;
 esac

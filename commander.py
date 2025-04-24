@@ -1,256 +1,189 @@
 import yaml
+import pprint
+import sys
 import os
+from colorama import init, Fore, Style
 import subprocess
 
+# Initialize colorama for cross-platform colored output
+init(autoreset=True)
 
-REQUIRED_FIELDS = {"name", "type", "ip", "protocol", "port"}
+def log_info(msg):
+    """Print an informational log message in blue."""
+    print(f"{Fore.BLUE}[INFO]{Style.RESET_ALL} {msg}")
 
-def setup_nat_rules(all_entities, network):
+def log_success(msg):
+    """Print a success log message in green."""
+    print(f"{Fore.GREEN}[OK]{Style.RESET_ALL} {msg}")
+
+def log_warning(msg):
+    """Print a warning log message in yellow."""
+    print(f"{Fore.YELLOW}[WARNING]{Style.RESET_ALL} {msg}")
+
+def log_error(msg):
+    """Print an error log message in red."""
+    print(f"{Fore.RED}[ERROR]{Style.RESET_ALL} {msg}")
+
+def load_config(path="config.yaml"):
     """
-    Insert DNAT into DOCKER-USER and SNAT into POSTROUTING
-    for *every* fuzzed entity, redirecting to the fuzzer gateway.
+    Load and parse the YAML configuration file.
+
+    Args:
+        path (str): Path to the YAML configuration file (default: "config.yaml").
+
+    Returns:
+        dict: Parsed configuration as a dictionary.
+
+    Exits:
+        If the file does not exist or is invalid YAML.
     """
-    print("[INFO] Configuring NAT rules in DOCKER-USER/POSTROUTING…")
+    if not os.path.isfile(path):
+        log_error(f"Config file '{path}' not found.")
+        sys.exit(1)
 
-    # 1. Găsește fuzzer‑ul
-    fuzzer = next(e for e in all_entities.values() if e["type"] == "fuzzer")
-    f_ip = fuzzer["ip"]
-
-    # 2. Pentru fiecare entitate de tip 'fuzzed'
-    for name, tgt in all_entities.items():
-        if tgt["type"] != "fuzzed":
-            continue
-
-        t_ip = tgt["ip"]
-        t_port = tgt["port"]
-        t_proto = tgt["protocol"]
-        print(f"[DNAT] {t_proto.upper()} {t_ip}:{t_port} → {f_ip}:{t_port}")
-        subprocess.run([
-            "sudo", "iptables", "-t", "nat", "-I", "PREROUTING",
-            "-p",   t_proto,
-            "-d",   f"{t_ip}/32",
-            "--dport", str(t_port),
-            "-j",   "DNAT", "--to-destination", f"{f_ip}:{t_port}"
-        ], check=True)
-
-        print(f"[SNAT] {t_proto.upper()} {t_ip}→{f_ip}:{t_port} rewrite src → {t_ip}")
-        subprocess.run([
-            "sudo", "iptables", "-t", "nat", "-I", "POSTROUTING",
-            "-p",   t_proto,
-            "-s",   f"{t_ip}/32",
-            "-d",   f"{f_ip}/32",
-            "--dport", str(t_port),
-            "-j",   "SNAT", "--to-source", t_ip
-        ], check=True)
-
-    print("[✓] NAT rules set.")
-
-def load_config(config_path="config.yaml"):
-    """
-    Load and validate the config.yaml structure.
-    Returns network dict and a flat list of all entities with full metadata.
-    """
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"[ERROR] Config file not found: {config_path}")
-
-    with open(config_path, 'r') as file:
-        try:
-            config = yaml.safe_load(file)
-        except yaml.YAMLError as e:
-            raise ValueError(f"[ERROR] YAML parsing error: {e}")
-
-    if 'network' not in config or 'entities' not in config:
-        raise ValueError("[ERROR] Missing 'network' or 'entities' in config.")
-
-    network = config['network']
-    raw_entities = config['entities']
-    all_entities = {}
-
-    # Flatten entity groups into one list
-    for group_name, group_entities in raw_entities.items():
-        for entity in group_entities:
-            # Basic validation
-            if not REQUIRED_FIELDS.issubset(entity.keys()):
-                raise ValueError(f"[ERROR] Missing fields in {entity.get('name', '?')}")
-
-            name = entity['name']
-            if name in all_entities:
-                raise ValueError(f"[ERROR] Duplicate entity name: {name}")
-
-            all_entities[name] = entity
-
-    # Validate 'depends_on' and 'fuzzed_entities'
-    for entity in all_entities.values():
-        for key in ['depends_on', 'fuzzed_entities']:
-            if key in entity:
-                for dep in entity[key]:
-                    if dep not in all_entities:
-                        raise ValueError(f"[ERROR] '{key}' contains unknown entity: {dep}")
-
-    return network, all_entities
-
-def check_docker_installed():
-    """
-    Check if Docker is installed and accessible.
-    """
-    print("[CHECK] Verifying Docker is installed...")
     try:
-        subprocess.run(["docker", "--version"], check=True, stdout=subprocess.DEVNULL)
-        print("[OK] Docker is available.")
-    except subprocess.CalledProcessError:
-        raise RuntimeError("[ERROR] Docker is not installed or not available in PATH.")
+        with open(path, "r") as f:
+            config = yaml.safe_load(f)
+            log_success("Config file loaded successfully.")
+            return config
+    except yaml.YAMLError as e:
+        log_error(f"Failed to parse YAML: {e}")
+        sys.exit(1)
 
-
-def create_docker_network(network, network_name="fuzznet"):
+def create_docker_network(network_cfg):
     """
-    Create a Docker bridge network using values from config if it doesn't exist.
+    Create a Docker network based on the configuration.
+    If the network already exists, it will be removed and recreated.
+
+    Args:
+        network_cfg (dict): Dictionary containing 'docker_network_name', 'subnet', and 'gateway'.
     """
-    subnet = network["subnet"]
-    gateway = network["gateway"]
+    name = network_cfg["docker_network_name"]
+    subnet = network_cfg["subnet"]
+    gateway = network_cfg["gateway"]
 
-    print(f"[CHECK] Ensuring Docker network '{network_name}' exists...")
-    result = subprocess.run(["docker", "network", "ls", "--filter", f"name=^{network_name}$", "--format", "{{.Name}}"],
-                            capture_output=True, text=True)
+    # Check if the network already exists
+    result = subprocess.run(
+        ["docker", "network", "ls", "--filter", f"name=^{name}$", "--format", "{{.Name}}"],
+        capture_output=True, text=True
+    )
 
-    if network_name in result.stdout.split():
-        print(f"[OK] Network '{network_name}' already exists.")
-    else:
-        print(f"[CREATE] Creating Docker network '{network_name}'...")
-        try:
-            subprocess.run([
-                "docker", "network", "create",
-                "--driver", "bridge",
-                "--subnet", subnet,
-                "--gateway", gateway,
-                network_name
-            ], check=True)
-            print(f"[SUCCESS] Network '{network_name}' created.")
-        except subprocess.CalledProcessError:
-            raise RuntimeError(f"[ERROR] Failed to create Docker network '{network_name}'.")
+    if result.stdout.strip() == name:
+        log_warning(f"Docker network '{name}' already exists. Removing it...")
+        rm_result = subprocess.run(["docker", "network", "rm", name])
+        if rm_result.returncode != 0:
+            log_error(f"Failed to remove Docker network '{name}'")
+            exit(1)
+        log_success(f"Removed existing network '{name}'")
 
-def get_start_order(entities_dict):
-    """
-    Return a list of entity names in the order they should be started,
-    based on their 'depends_on' relationships.
-
-    Raises RuntimeError on circular dependency.
-    """
-    visited = set()
-    temp_stack = set()
-    start_order = []
-
-    # Flatten all entity definitions
-    flat_entities = {}
-    for entity in entities_dict.values():
-        flat_entities[entity["name"]] = entity
-
-    def visit(name):
-        if name in visited:
-            return
-        if name in temp_stack:
-            raise RuntimeError(f"[ERROR] Circular dependency detected involving '{name}'")
-
-        temp_stack.add(name)
-        entity = flat_entities.get(name)
-        if not entity:
-            raise ValueError(f"[ERROR] Entity '{name}' not found in config.")
-
-        for dep in entity.get("depends_on", []):
-            visit(dep)
-
-        temp_stack.remove(name)
-        visited.add(name)
-        start_order.append(name)
-
-    # Run DFS on all entities
-    for entity_name in flat_entities.keys():
-        if entity_name not in visited:
-            visit(entity_name)
-
-    print(start_order)
-    return start_order
-
-
-def start_entity_container(entity, network_name="fuzznet"):
-    """
-    Start a Docker container for one entity based on config.
-    """
-    docker_cfg = entity.get("docker", {})
-    name = entity["name"]
-    ip = entity["ip"]
-    image = docker_cfg.get("image", "fuzz_base")
-    mount = docker_cfg.get("mount")  # ex: ./build/something:/app/binary
-    cmd = docker_cfg.get("cmd", "/app/binary")
-    workdir = docker_cfg.get("workdir", "/app")
-    env_vars = docker_cfg.get("env", {})
-    ports = docker_cfg.get("ports", [])
-    args = docker_cfg.get("args", [])
-    gateway = docker_cfg.get("gateway", None)
-
-    if not mount:
-        raise ValueError(f"[ERROR] Entity '{name}' has no 'mount' path defined in docker config.")
-
-    local_path, container_path = mount.split(":")
-    local_path = os.path.abspath(local_path)
-
-    # Build docker run command
-    docker_cmd = [
-        "docker", "run", "-d",
-        "--name", f"{name}_container",
-        "--network", network_name,
-        "--ip", ip,
-        "-v", f"{local_path}:{container_path}",
-        "-w", workdir
+    # Create the network fresh
+    log_info(f"Creating Docker network '{name}'...")
+    create_cmd = [
+        "docker", "network", "create",
+        "--subnet", subnet,
+        "--gateway", gateway,
+        name
     ]
+    create_result = subprocess.run(create_cmd)
+    if create_result.returncode != 0:
+        log_error(f"Failed to create Docker network '{name}'")
+        exit(1)
 
-    if entity.get("type") == "fuzzer":
-        docker_cmd.extend(["--cap-add=NET_ADMIN"])
+    log_success(f"Docker network '{name}' created successfully.\n")
 
-    # Add environment variables
-    for key, value in env_vars.items():
-        docker_cmd.extend(["-e", f"{key}={value}"])
+def load_template_content(template_path):
+    """Reads and returns the content of the Dockerfile template."""
+    try:
+        with open(template_path, "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        log_error(f"Template file not found: {template_path}")
+        return None
 
-    # Add ports
-    for port_map in ports:
-        docker_cmd.extend(["-p", port_map])
+def generate_iptables_rule(entity_name, entity_cfg, all_entities):
+    """Generates an iptables redirect rule for fuzzed entities, except for fuzzer roles."""
+    if entity_cfg.get("role") == "fuzzer":
+        return ""  # Fuzzers do not need iptables rules
 
-    # Add image + CMD + optional args
-    docker_cmd.append(image)
+    if not entity_cfg.get("fuzzed", False):
+        return ""
 
-    # If fuzzer, prepend IP forwarding activation
+    fuzzer = next((cfg for name, cfg in all_entities.items() if cfg["role"] == "fuzzer"), None)
+    if not fuzzer:
+        log_warning(f"No fuzzer found for fuzzed entity '{entity_name}'")
+        return ""
+
+    proto = entity_cfg.get("protocol", "tcp").lower()
+    proto_flag = "-p tcp" if proto == "tcp" else "-p udp"
+    return (
+        f"RUN iptables -t nat -A OUTPUT -d {entity_cfg['ip']} {proto_flag} "
+        f"--dport {entity_cfg['port']} -j DNAT --to-destination {fuzzer['ip']}:{entity_cfg['port']}"
+    )
+
+def generate_exec_command(entity_cfg):
+    """Generates the final CMD instruction to start the app inside the container."""
+    exec_with = entity_cfg.get("exec_with", "").strip()
+    local_binary_path = entity_cfg.get("binary_path", "").strip()
+
+    if not local_binary_path:
+        log_error(f"'binary_path' missing or invalid for entity '{entity_cfg}'")
+        return ""
+
+    # Full path inside container based on 'COPY . /app'
+    container_binary_path = "/app/" + local_binary_path.lstrip("./")
+    args = entity_cfg.get("args", [])
+
+    cmd_parts = []
+    if exec_with:
+        cmd_parts.append(exec_with)
+    cmd_parts.append(container_binary_path)
+    cmd_parts.extend(args)
+
+    return 'CMD [{}]'.format(", ".join(repr(arg) for arg in cmd_parts))
+
+def generate_dockerfile(entity_name, entity_cfg, all_entities, template_path="Dockerfile.template"):
+    """
+    Generates Dockerfile.<entity_name> in docker/ directory using the shared template.
+    Inserts iptables rules and CMD instruction dynamically.
+    """
+    os.makedirs("docker", exist_ok=True)
+    output_path = f"docker/Dockerfile.{entity_name}"
+
+    template_content = load_template_content(template_path)
+    if template_content is None:
+        return
+
+    iptables_rule = generate_iptables_rule(entity_name, entity_cfg, all_entities)
+    exec_command = generate_exec_command(entity_cfg)
+
+    dockerfile_content = template_content \
+        .replace("# <IPTABLES_RULES>", iptables_rule) \
+        .replace("# <EXEC_COMMAND>", exec_command)
+
+    with open(output_path, "w") as f:
+        f.write(dockerfile_content)
+
+    log_success(f"Dockerfile generated for '{entity_name}' → {output_path}")
+
+
+def main():
+    """
+    Main entry point for the commander.
+    Loads configuration and (soon) executes orchestration logic.
+    """
+    log_info("Loading configuration...")
+    config = load_config()
+
+    log_info("Displaying configuration:")
+    pprint.pprint(config, width=100)
+
+    log_info("Step 1: Creating Docker network...")
+    create_docker_network(config["network"])
+
+    log_info("Step 2: Generating Dockerfiles from template...")
+    for entity_name, entity_cfg in config["entities"].items():
+        generate_dockerfile(entity_name, entity_cfg, config["entities"])
     
-    docker_cmd.append(cmd)
-    docker_cmd.extend(args)
-
-    print(f"[DOCKER] Starting container for '{name}'...")
-    subprocess.run(docker_cmd, check=True)
-    print(f"[SUCCESS] Container for '{name}' is running.")
-
 
 if __name__ == "__main__":
-    network, entities = load_config()
-    print("[INFO] [✓] Network config loaded:", network)
-    print("[INFO] [✓] Entities found:", list(entities.keys()))
-
-    check_docker_installed()
-    print("[INFO] [✓] Docker checked")
-
-    create_docker_network(network)
-    print("[INFO] [✓] Network created: ", network)
-
-    setup_nat_rules(entities, network)
-
-
-    start_order = get_start_order(entities)
-    print ("[INFO] Start order: ", start_order)
-
-    # Flatten entities
-    all_entities = {}
-    for entity in entities.values():
-        print(entity)
-        all_entities[entity["name"]] = entity
-
-    for name in start_order:
-        entity = all_entities[name]
-        start_entity_container(entity)
-
+    main()
