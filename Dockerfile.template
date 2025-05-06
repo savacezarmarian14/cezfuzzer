@@ -1,17 +1,13 @@
-# Use a slim Python base image (can be changed per project)
 FROM python:3.9-slim
 
-# Set working directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Copy all project files into container
+# Copy entire project into the container
 COPY . /app
 
-# Install tools like iptables if needed
-RUN apt-get update && apt-get install -y iptables iproute2
+# Run entrypoint script (generates iptables rules then execs CMD)
+# <ENTRYPOINT>
 
-# Optional iptables rules (inserted dynamically)
-# <IPTABLES_RULES>
-
-# Default execution command (inserted dynamically)
+# Default command to launch the application
 # <EXEC_COMMAND>

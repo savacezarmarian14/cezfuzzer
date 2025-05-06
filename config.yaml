@@ -13,10 +13,10 @@ entities:
     protocol: udp
     ip: 192.168.1.10                    
     port: 5000                          
-    fuzzed: true                       
+    fuzzed: false                       
     exec_with: python3                  
-    binary_path: ./tests/udp_inifinite_loop/main.py 
-    args: []                            
+    binary_path: ./tests/udp_infinite_loop/main.py 
+    args: [192.168.1.10:5000, 192.168.1.11:5001]                            
     destinations:                       
       - ip: 192.168.1.11
         port: 5001
@@ -26,10 +26,10 @@ entities:
     protocol: udp
     ip: 192.168.1.11
     port: 5001
-    fuzzed: true
+    fuzzed: false
     exec_with: python3
-    binary_path: ./tests/udp_inifinite_loop/main.py 
-    args: []
+    binary_path: ./tests/udp_infinite_loop/main.py 
+    args: [192.168.1.11:5001, 192.168.1.10:5000]
     destinations:
       - ip: 192.168.1.10
         port: 5000

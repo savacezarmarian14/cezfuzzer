@@ -1,189 +1,234 @@
+#!/usr/bin/env python3
+import os
+import sys
 import yaml
 import pprint
-import sys
-import os
-from colorama import init, Fore, Style
+import argparse
 import subprocess
+from colorama import init, Fore, Style
+import json
 
-# Initialize colorama for cross-platform colored output
+
+# Initialize colorama for colored terminal output
 init(autoreset=True)
 
+# ------------------- Logging helpers -------------------
 def log_info(msg):
-    """Print an informational log message in blue."""
     print(f"{Fore.BLUE}[INFO]{Style.RESET_ALL} {msg}")
 
 def log_success(msg):
-    """Print a success log message in green."""
     print(f"{Fore.GREEN}[OK]{Style.RESET_ALL} {msg}")
 
 def log_warning(msg):
-    """Print a warning log message in yellow."""
     print(f"{Fore.YELLOW}[WARNING]{Style.RESET_ALL} {msg}")
 
 def log_error(msg):
-    """Print an error log message in red."""
     print(f"{Fore.RED}[ERROR]{Style.RESET_ALL} {msg}")
 
-def load_config(path="config.yaml"):
-    """
-    Load and parse the YAML configuration file.
-
-    Args:
-        path (str): Path to the YAML configuration file (default: "config.yaml").
-
-    Returns:
-        dict: Parsed configuration as a dictionary.
-
-    Exits:
-        If the file does not exist or is invalid YAML.
-    """
+# ------------------- Configuration loader -------------------
+def load_config(path):
     if not os.path.isfile(path):
         log_error(f"Config file '{path}' not found.")
         sys.exit(1)
-
     try:
-        with open(path, "r") as f:
-            config = yaml.safe_load(f)
-            log_success("Config file loaded successfully.")
-            return config
+        with open(path) as f:
+            cfg = yaml.safe_load(f)
+            log_success(f"Loaded config: {path}")
+            return cfg
     except yaml.YAMLError as e:
         log_error(f"Failed to parse YAML: {e}")
         sys.exit(1)
 
-def create_docker_network(network_cfg):
-    """
-    Create a Docker network based on the configuration.
-    If the network already exists, it will be removed and recreated.
+# ------------------- Docker network management -------------------
+def create_docker_network(net_cfg):
+    name = net_cfg.get("docker_network_name")
+    subnet = net_cfg.get("subnet")
+    gateway = net_cfg.get("gateway")
 
-    Args:
-        network_cfg (dict): Dictionary containing 'docker_network_name', 'subnet', and 'gateway'.
-    """
-    name = network_cfg["docker_network_name"]
-    subnet = network_cfg["subnet"]
-    gateway = network_cfg["gateway"]
+    # Remove existing network if present
+    r = subprocess.run([
+        "docker", "network", "ls", "--filter", f"name=^{name}$", "--format", "{{.Name}}"
+    ], capture_output=True, text=True)
+    if r.stdout.strip() == name:
+        log_warning(f"Network '{name}' exists, removing...")
+        if subprocess.run(["docker", "network", "rm", name]).returncode != 0:
+            log_error(f"Failed to remove network {name}")
+            sys.exit(1)
+        log_success(f"Removed existing network: {name}")
 
-    # Check if the network already exists
-    result = subprocess.run(
-        ["docker", "network", "ls", "--filter", f"name=^{name}$", "--format", "{{.Name}}"],
-        capture_output=True, text=True
-    )
+    # Create the network
+    log_info(f"Creating network '{name}' (subnet {subnet}, gateway {gateway})...")
+    if subprocess.run([
+        "docker", "network", "create", "--subnet", subnet, "--gateway", gateway, name
+    ]).returncode != 0:
+        log_error(f"Failed to create network {name}")
+        sys.exit(1)
+    log_success(f"Docker network '{name}' created.")
 
-    if result.stdout.strip() == name:
-        log_warning(f"Docker network '{name}' already exists. Removing it...")
-        rm_result = subprocess.run(["docker", "network", "rm", name])
-        if rm_result.returncode != 0:
-            log_error(f"Failed to remove Docker network '{name}'")
-            exit(1)
-        log_success(f"Removed existing network '{name}'")
+# ------------------- Template loading -------------------
+def load_template(template_path):
+    if not os.path.isfile(template_path):
+        log_error(f"Template not found: {template_path}")
+        sys.exit(1)
+    with open(template_path) as f:
+        return f.read()
 
-    # Create the network fresh
-    log_info(f"Creating Docker network '{name}'...")
-    create_cmd = [
-        "docker", "network", "create",
-        "--subnet", subnet,
-        "--gateway", gateway,
-        name
-    ]
-    create_result = subprocess.run(create_cmd)
-    if create_result.returncode != 0:
-        log_error(f"Failed to create Docker network '{name}'")
-        exit(1)
-
-    log_success(f"Docker network '{name}' created successfully.\n")
-
-def load_template_content(template_path):
-    """Reads and returns the content of the Dockerfile template."""
-    try:
-        with open(template_path, "r") as f:
-            return f.read()
-    except FileNotFoundError:
-        log_error(f"Template file not found: {template_path}")
-        return None
-
+# ------------------- Dockerfile & Entrypoint generation -------------------
 def generate_iptables_rule(entity_name, entity_cfg, all_entities):
-    """Generates an iptables redirect rule for fuzzed entities, except for fuzzer roles."""
-    if entity_cfg.get("role") == "fuzzer":
-        return ""  # Fuzzers do not need iptables rules
-
-    if not entity_cfg.get("fuzzed", False):
+    # Only for fuzzed, non-fuzzer roles
+    if not entity_cfg.get("fuzzed", False) or entity_cfg.get("role") == "fuzzer":
         return ""
-
-    fuzzer = next((cfg for name, cfg in all_entities.items() if cfg["role"] == "fuzzer"), None)
-    if not fuzzer:
-        log_warning(f"No fuzzer found for fuzzed entity '{entity_name}'")
+    # Find first fuzzer entity
+    f = next((c for _, c in all_entities.items() if c.get("role") == "fuzzer"), None)
+    if not f:
+        log_warning(f"No fuzzer defined for entity '{entity_name}'")
         return ""
-
     proto = entity_cfg.get("protocol", "tcp").lower()
-    proto_flag = "-p tcp" if proto == "tcp" else "-p udp"
+    flag = "-p tcp" if proto == "tcp" else "-p udp"
     return (
-        f"RUN iptables -t nat -A OUTPUT -d {entity_cfg['ip']} {proto_flag} "
-        f"--dport {entity_cfg['port']} -j DNAT --to-destination {fuzzer['ip']}:{entity_cfg['port']}"
+        f"iptables -t nat -A OUTPUT -d {entity_cfg['ip']} {flag} "
+        f"--dport {entity_cfg['port']} -j DNAT --to-destination {f['ip']}:{entity_cfg['port']}"
     )
 
 def generate_exec_command(entity_cfg):
-    """Generates the final CMD instruction to start the app inside the container."""
     exec_with = entity_cfg.get("exec_with", "").strip()
-    local_binary_path = entity_cfg.get("binary_path", "").strip()
-
-    if not local_binary_path:
-        log_error(f"'binary_path' missing or invalid for entity '{entity_cfg}'")
+    local_path = entity_cfg.get("binary_path", "").strip()
+    if not local_path:
+        log_error(f"Missing 'binary_path' for entity: {entity_cfg}")
         return ""
-
-    # Full path inside container based on 'COPY . /app'
-    container_binary_path = "/app/" + local_binary_path.lstrip("./")
+    # Container will have /app root
+    cont_path = "/app/" + local_path.lstrip("./")
     args = entity_cfg.get("args", [])
-
-    cmd_parts = []
-    if exec_with:
-        cmd_parts.append(exec_with)
-    cmd_parts.append(container_binary_path)
-    cmd_parts.extend(args)
-
-    return 'CMD [{}]'.format(", ".join(repr(arg) for arg in cmd_parts))
+    parts = ([exec_with] if exec_with else []) + [cont_path] + args
+    # Build CMD JSON array
+    quoted = ", ".join(f'"{p}"' for p in parts)
+    return f"CMD [{quoted}]"
 
 def generate_dockerfile(entity_name, entity_cfg, all_entities, template_path="Dockerfile.template"):
-    """
-    Generates Dockerfile.<entity_name> in docker/ directory using the shared template.
-    Inserts iptables rules and CMD instruction dynamically.
-    """
+    # Ensure output dir
     os.makedirs("docker", exist_ok=True)
-    output_path = f"docker/Dockerfile.{entity_name}"
+    tpl = load_template(template_path)
 
-    template_content = load_template_content(template_path)
-    if template_content is None:
-        return
+    # 1) create entrypoint script
+    rule = generate_iptables_rule(entity_name, entity_cfg, all_entities)
+    entry_path = f"docker/entrypoint_{entity_name}.sh"
+    with open(entry_path, "w") as ef:
+        ef.write("#!/bin/sh\n")
+        if rule:
+            ef.write(rule + "\n")
+        ef.write('exec "$@"\n')
+    os.chmod(entry_path, 0o755)
+    log_success(f"Entrypoint script -> {entry_path}")
 
-    iptables_rule = generate_iptables_rule(entity_name, entity_cfg, all_entities)
-    exec_command = generate_exec_command(entity_cfg)
+    # 2) fill in Dockerfile.template
+    entry_block = (
+        f"COPY {entry_path} /entrypoint.sh\n"
+        "RUN chmod +x /entrypoint.sh\n"
+        "ENTRYPOINT [\"/entrypoint.sh\"]"
+    )
+    cmd_block = generate_exec_command(entity_cfg)
+    content = tpl.replace("# <ENTRYPOINT>", entry_block).replace("# <EXEC_COMMAND>", cmd_block)
+    out_path = os.path.join("docker", f"Dockerfile.{entity_name}")
+    with open(out_path, "w") as df:
+        df.write(content)
+    log_success(f"Generated Dockerfile -> {out_path}")
 
-    dockerfile_content = template_content \
-        .replace("# <IPTABLES_RULES>", iptables_rule) \
-        .replace("# <EXEC_COMMAND>", exec_command)
+# ------------------- Build & run containers -------------------
+def build_image(entity_name):
+    df = f"docker/Dockerfile.{entity_name}"
+    tag = f"{entity_name}_image"
+    log_info(f"Building image '{tag}'...")
+    if subprocess.run(["docker", "build", "-f", df, "-t", tag, "."]).returncode != 0:
+        log_error(f"Failed to build image {tag}")
+        sys.exit(1)
+    log_success(f"Built image {tag}")
+    return tag
+
+def run_container(entity_name, entity_cfg, image_tag, network_cfg, standby=False):
+    cname = f"{entity_name}_container"
+
+    # Remove existing container if present
+    existing = subprocess.run([
+        "docker", "ps", "-a", "-q", "-f", f"name=^{cname}$"
+    ], capture_output=True, text=True).stdout.strip()
+    if existing:
+        log_warning(f"Container '{cname}' exists, removing...")
+        if subprocess.run(["docker", "rm", "-f", cname]).returncode != 0:
+            log_error(f"Failed to remove container {cname}")
+            sys.exit(1)
+        log_success(f"Removed container: {cname}")
+
+    # Run new container
+    log_info(f"Running container '{cname}'...")
+    cmd = [
+        "docker", "run", "-d", "--name", cname,
+        "--network", network_cfg.get("docker_network_name"),
+        "--ip", entity_cfg.get("ip"),
+        image_tag
+    ]
+    if standby:
+        cmd += ["tail", "-f", "/dev/null"]
+    if subprocess.run(cmd).returncode != 0:
+        log_error(f"Failed to run {cname}")
+        sys.exit(1)
+    mode = "in standby mode (waiting)" if standby else ""
+    log_success(f"Container '{cname}' started {mode}.")
+
+def launch_all_entities(config, standby=False):
+    net_cfg = config.get("network", {})
+    for name, ent in config.get("entities", {}).items():
+        tag = build_image(name)
+        run_container(name, ent, tag, net_cfg, standby)
+
+def export_entities_minimal_json(config, output_path="entities_config.json"):
+    result = {"udp": {}, "tcp": {}}
+
+    for name, entity in config.get("entities", {}).items():
+        proto = entity.get("protocol", "").lower()
+        if proto not in ["tcp", "udp"]:
+            continue
+
+        entry = {
+            "ip": entity.get("ip"),
+            "port": entity.get("port"),
+            "role": entity.get("role"),
+            "destinations": []
+        }
+
+        if proto == "udp":
+            entry["destinations"] = entity.get("destinations", [])
+        elif proto == "tcp" and "connect_to" in entity:
+            entry["destinations"] = [entity["connect_to"]]
+
+        result[proto][name] = entry
 
     with open(output_path, "w") as f:
-        f.write(dockerfile_content)
+        json.dump(result, f, indent=2)
 
-    log_success(f"Dockerfile generated for '{entity_name}' → {output_path}")
+    log_success(f"Exported entity metadata → {output_path}")
 
-
+# ------------------- Main -------------------
 def main():
-    """
-    Main entry point for the commander.
-    Loads configuration and (soon) executes orchestration logic.
-    """
-    log_info("Loading configuration...")
-    config = load_config()
+    parser = argparse.ArgumentParser(description="Commander for MITM fuzzer infrastructure")
+    parser.add_argument("--config", default="config.yaml", help="Path to config YAML")
+    parser.add_argument("--template", default="Dockerfile.template", help="Path to Dockerfile template")
+    parser.add_argument("--standby", action="store_true", help="Start containers in standby mode (no auto-exec)")
+    args = parser.parse_args()
 
-    log_info("Displaying configuration:")
-    pprint.pprint(config, width=100)
+    cfg = load_config(args.config)
+    export_entities_minimal_json(cfg)
+    log_info("Loaded configuration:")
+    pprint.pprint(cfg, width=120)
 
-    log_info("Step 1: Creating Docker network...")
-    create_docker_network(config["network"])
+    log_info("Creating Docker network...")
+    create_docker_network(cfg.get("network", {}))
 
-    log_info("Step 2: Generating Dockerfiles from template...")
-    for entity_name, entity_cfg in config["entities"].items():
-        generate_dockerfile(entity_name, entity_cfg, config["entities"])
-    
+    log_info("Generating Dockerfiles and entrypoints...")
+    for name, ent in cfg.get("entities", {}).items():
+        generate_dockerfile(name, ent, cfg.get("entities", {}), args.template)
+
+    log_info("Building images and launching containers...")
+    launch_all_entities(cfg, args.standby)
 
 if __name__ == "__main__":
     main()

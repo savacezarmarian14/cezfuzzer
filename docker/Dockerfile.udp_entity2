@@ -1,17 +1,15 @@
-# Use a slim Python base image (can be changed per project)
 FROM python:3.9-slim
 
-# Set working directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Copy all project files into container
+# Copy entire project into the container
 COPY . /app
 
-# Install tools like iptables if needed
-RUN apt-get update && apt-get install -y iptables iproute2
+# Run entrypoint script (generates iptables rules then execs CMD)
+COPY docker/entrypoint_udp_entity2.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 
-# Optional iptables rules (inserted dynamically)
-RUN iptables -t nat -A OUTPUT -d 192.168.1.11 -p udp --dport 5001 -j DNAT --to-destination 192.168.1.40:5001
-
-# Default execution command (inserted dynamically)
-CMD ['python3', '/app/tests/udp_inifinite_loop/main.py']
+# Default command to launch the application
+CMD ["python3", "/app/tests/udp_infinite_loop/main.py", "192.168.1.11:5001", "192.168.1.10:5000"]

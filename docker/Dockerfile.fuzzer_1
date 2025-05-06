@@ -1,17 +1,15 @@
-# Use a slim Python base image (can be changed per project)
 FROM python:3.9-slim
 
-# Set working directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Copy all project files into container
+# Copy entire project into the container
 COPY . /app
 
-# Install tools like iptables if needed
-RUN apt-get update && apt-get install -y iptables iproute2
+# Run entrypoint script (generates iptables rules then execs CMD)
+COPY docker/entrypoint_fuzzer_1.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 
-# Optional iptables rules (inserted dynamically)
-
-
-# Default execution command (inserted dynamically)
-CMD ['/app/bin/fuzzer_1']
+# Default command to launch the application
+CMD ["/app/bin/fuzzer_1"]
