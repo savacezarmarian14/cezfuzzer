@@ -6,6 +6,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Add the subdirectory containing the proxy application
 add_subdirectory(proxy)
+add_subdirectory(luncher)
 
 # Optionally add commander/ if it becomes a C++ component
+
 # add_subdirectory(commander)
+
+
