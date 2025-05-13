@@ -1,0 +1,15 @@
+FROM python:3.9-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy entire project into the container
+COPY . /app
+
+# Run entrypoint script (generates iptables rules then execs CMD)
+COPY docker/entrypoint_udp_entity1.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Default command to launch the application
+CMD ["python3", "/app/tests/udp_infinite_loop/main.py", "192.168.1.10:5000", "192.168.1.11:5001"]

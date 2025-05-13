@@ -1,0 +1,15 @@
+FROM python:3.9-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy entire project into the container
+COPY . /app
+
+# Run entrypoint script (generates iptables rules then execs CMD)
+COPY docker/entrypoint_fuzzer_1.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Default command to launch the application
+CMD ["/app/bin/fuzzer_1"]

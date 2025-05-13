@@ -1,51 +1,44 @@
+general:
+  log_level: "INFO"                      
+  log_dir: logs/                         
+
 network:
-  subnet: "192.168.100.0/24"
-  gateway: "192.168.100.3"
+  docker_network_name: mitm_net         
+  subnet: 192.168.1.0/24                
+  gateway: 192.168.1.1                  
 
 entities:
-  client:
-    - name: client
-      type: fuzzed
-      ip: "192.168.100.2"
-      protocol: "tcp"
-      port: 9000
-      depends_on: ["fuzzer"]
-      docker:
-        image: "fuzz_base"
-        mount: "./build/test_src/tcp_client:/app/binary"
-        workdir: "/app"
-        cmd: "/app/binary"
-        args:
-          - "192.168.100.1"
-          - "9000"
+  udp_entity1:
+    role: hybrid                        
+    protocol: udp
+    ip: 192.168.1.10                    
+    port: 5000                          
+    fuzzed: false                       
+    exec_with: python3                  
+    binary_path: ./tests/udp_infinite_loop/main.py 
+    args: [192.168.1.10:5000, 192.168.1.11:5001]                            
+    destinations:                       
+      - ip: 192.168.1.11
+        port: 5001
 
-  fuzzer:
-    - name: fuzzer
-      type: fuzzer
-      ip: "192.168.100.3"
-      protocol: "tcp"
-      port: 9000
-      depends_on: ["server"]
-      fuzzed_entities: ["client", "server"]
-      docker:
-        image: "fuzz_base"
-        mount: "./build/src/test1-fuzzer:/app/binary"
-        workdir: "/app"
-        cmd: "/app/binary"
-        args:
-          - "9000"
-          - "192.168.100.1"
+  udp_entity2:
+    role: hybrid
+    protocol: udp
+    ip: 192.168.1.11
+    port: 5001
+    fuzzed: false
+    exec_with: python3
+    binary_path: ./tests/udp_infinite_loop/main.py 
+    args: [192.168.1.11:5001, 192.168.1.10:5000]
+    destinations:
+      - ip: 192.168.1.10
+        port: 5000
 
-  server:
-    - name: server
-      type: fuzzed
-      ip: "192.168.100.1"
-      protocol: "tcp"
-      port: 9000
-      docker:
-        image: "fuzz_base"
-        mount: "./build/test_src/tcp_server:/app/binary"
-        workdir: "/app"
-        cmd: "/app/binary"
-        args:
-          - "9000"
+  fuzzer_1:
+    role: fuzzer
+    ip: 192.168.1.40
+    port: 5050
+    fuzzed: true
+    exec_with: ""                      
+    binary_path: ./bin/fuzzer_1
+    args: []

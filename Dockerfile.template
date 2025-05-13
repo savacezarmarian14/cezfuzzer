@@ -1,0 +1,13 @@
+FROM python:3.9-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy entire project into the container
+COPY . /app
+
+# Run entrypoint script (generates iptables rules then execs CMD)
+# <ENTRYPOINT>
+
+# Default command to launch the application
+# <EXEC_COMMAND>

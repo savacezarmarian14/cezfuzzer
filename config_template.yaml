@@ -1,0 +1,86 @@
+general:
+  log_level:                        # Global log level for all components (e.g., DEBUG, INFO, WARNING, ERROR)
+  log_dir:                          # Path to the directory where log files will be stored
+
+network:
+  docker_network_name:              # Name of the Docker network used by all entities
+  subnet:                           # Subnet range for Docker IP addresses (e.g., 172.25.0.0/16)
+  gateway:                          # Default gateway IP address within the Docker subnet
+
+entities:
+  udp_sender:
+    role: sender                    # Defines the entity as a UDP sender
+    protocol: udp                   # Must be 'udp' for UDP entities
+    ip:                             # IP address used by this entity (inside Docker)
+    port:                           # Source port used to send data (0 = ephemeral)
+    fuzzed:                         # true or false – whether this entity is fuzzed
+    binary_path:                    # Path to the binary for this entity
+    exec_with:
+    args: []                        # List of command-line arguments for the binary
+    destinations:                   # List of one or more target destination endpoints
+      - ip:                         # IP address of the destination
+        port:                       # Port number of the destination
+      - ip:
+        port:
+
+  udp_receiver:
+    role: receiver                  # Defines the entity as a UDP receiver
+    protocol: udp
+    ip:                             # IP address where this entity listens for packets
+    port:                           # Port to bind and receive incoming UDP datagrams
+    fuzzed:                         # true or false – whether fuzzing is applied
+    binary_path:                    # Path to the binary for this entity
+    exec_with:
+    args: []                        # List of command-line arguments for the binary
+    destinations:                   # (Optional) known sending entities or reply destinations
+      - ip:
+        port:
+      - ip:
+        port:
+
+  udp_hybrid:
+    role: hybrid                    # Entity that both sends and receives UDP traffic
+    protocol: udp
+    ip:                             # IP address used for binding
+    port:                           # Port used for both receiving and sending
+    fuzzed:                         # true or false – whether fuzzing logic is applied
+    binary_path:                    # Path to the binary for this entity
+    exec_with:
+    args: []                        # List of command-line arguments for the binary
+    destinations:                   # List of all endpoints this hybrid entity can send to
+      - ip:
+        port:
+      - ip:
+        port:
+
+  tcp_client:
+    role: client                    # Defines the entity as a TCP client (initiates connections)
+    protocol: tcp
+    ip:                             # IP address used to initiate TCP connection
+    port:                           # Port used by client (0 = ephemeral)
+    fuzzed:                         # true or false – whether outgoing traffic is fuzzed
+    binary_path:                    # Path to the binary for this entity
+    args: []                        # List of command-line arguments for the binary
+    exec_with:
+    connect_to:                     # Destination server to connect to
+      ip:                           # Server IP address
+      port:                         # Server port
+
+  tcp_server:
+    role: server                    # TCP server – listens for incoming connections
+    protocol: tcp
+    ip:                             # IP address to bind the server on
+    port:                           # Port to listen for TCP connections
+    fuzzed:                         # true or false – whether incoming traffic is fuzzed
+    binary_path:                    # Path to the binary for this entity
+    exec_with:
+    args: []                        # List of command-line arguments for the binary
+
+  fuzzer_1:
+    role: fuzzer                    # Entity that sits between client and server, mutating traffic
+    ip:                             # IP address the fuzzer listens on
+    port:                           # Port the fuzzer listens on
+    fuzzed:                         # true or false – whether fuzzing is enabled
+    binary_path:                    # Path to the binary for this fuzzer
+    exec_with:
+    args: []                        # List of command-line arguments for the binary
