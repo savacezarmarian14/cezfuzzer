@@ -91,18 +91,8 @@ def generate_iptables_rule(entity_name, entity_cfg, all_entities):
     )
 
 def generate_exec_command(entity_cfg):
-    exec_with = entity_cfg.get("exec_with", "").strip()
-    local_path = entity_cfg.get("binary_path", "").strip()
-    if not local_path:
-        log_error(f"Missing 'binary_path' for entity: {entity_cfg}")
-        return ""
-    # Container will have /app root
-    cont_path = "/app/" + local_path.lstrip("./")
-    args = entity_cfg.get("args", [])
-    parts = ([exec_with] if exec_with else []) + [cont_path] + args
-    # Build CMD JSON array
-    quoted = ", ".join(f'"{p}"' for p in parts)
-    return f"CMD [{quoted}]"
+    return 'CMD ["tail", "-f", "/dev/null"]'
+
 
 def generate_dockerfile(entity_name, entity_cfg, all_entities, template_path="Dockerfile.template"):
     # Ensure output dir
@@ -144,7 +134,7 @@ def build_image(entity_name):
     log_success(f"Built image {tag}")
     return tag
 
-def run_container(entity_name, entity_cfg, image_tag, network_cfg, standby=False):
+def run_container(entity_name, entity_cfg, image_tag, network_cfg, standby=True):
     cname = f"{entity_name}_container"
 
     # Remove existing container if present
@@ -166,19 +156,56 @@ def run_container(entity_name, entity_cfg, image_tag, network_cfg, standby=False
         "--ip", entity_cfg.get("ip"),
         image_tag
     ]
-    if standby:
-        cmd += ["tail", "-f", "/dev/null"]
+
     if subprocess.run(cmd).returncode != 0:
         log_error(f"Failed to run {cname}")
         sys.exit(1)
     mode = "in standby mode (waiting)" if standby else ""
     log_success(f"Container '{cname}' started {mode}.")
 
-def launch_all_entities(config, standby=False):
+def launch_all_entities(config, standby=True):
     net_cfg = config.get("network", {})
     for name, ent in config.get("entities", {}).items():
         tag = build_image(name)
         run_container(name, ent, tag, net_cfg, standby)
+
+import time
+
+def run_launcher(config):
+    # sort to get fuzzer first (runs server application)
+    entities = dict(
+        sorted(config.get("entities", {}).items(), key=lambda item: item[1].get("role") != "fuzzer")
+    )
+
+    fuzzer_ip = next(ent["ip"] for ent in entities.values() if ent.get("role") == "fuzzer")
+
+    for name, ent in entities.items():
+        container = f"{name}_container"
+
+        if ent.get("role") == "fuzzer":
+            launcher = "/app/build/luncher/server/server"
+            cmd = [
+                "docker", "exec", "-d", container,
+                "sh", "-c", f"{launcher} > /tmp/launcher.log 2>&1"
+            ]
+        else:
+            launcher = "/app/build/luncher/client/client"
+            cmd = [
+                "docker", "exec", "-d", container,
+                "sh", "-c", f"{launcher} {fuzzer_ip} > /tmp/launcher.log 2>&1"
+            ]
+
+        log_info(f"Starting {launcher} in container '{container}'...")
+        print("[debug]", cmd)
+
+        if subprocess.run(cmd).returncode != 0:
+            log_error(f"Failed to start {launcher} in {container}")
+            sys.exit(1)
+        log_success(f"Launched {launcher} in {container}")
+
+        if ent.get("role") == "fuzzer":
+            time.sleep(0.2)
+
 
 def export_entities_minimal_json(config, output_path="entities_config.json"):
     result = {"udp": {}, "tcp": {}}
@@ -228,7 +255,8 @@ def main():
         generate_dockerfile(name, ent, cfg.get("entities", {}), args.template)
 
     log_info("Building images and launching containers...")
-    launch_all_entities(cfg, args.standby)
+    launch_all_entities(config=cfg)
+    run_launcher(config=cfg)
 
 if __name__ == "__main__":
     main()

@@ -1,8 +1,5 @@
 #include "Server.hpp"
 
-#define LISTEN_PORT 23927
-
-
 
 void *handle_client_connection(void *arg)
 {

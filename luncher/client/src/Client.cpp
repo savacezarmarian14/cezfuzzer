@@ -9,7 +9,8 @@ void test_function(int sockfd)
     while (1) {
         ret = send_message(sockfd, "Hello", 5);
         printf("[INFO] Message sent.\n");
-        sleep(1);
+        fflush(stdout);
+        usleep(500000);
     }
 }
 
@@ -119,7 +120,8 @@ int init_client(char* serverIP)
 
 int main(int argc, char *argv[])
 {
-    init_client(argv[1]);
+    char *server_addr = argv[1];
+    init_client(server_addr);
     
     return 0;
 }

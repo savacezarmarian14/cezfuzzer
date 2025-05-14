@@ -17,6 +17,8 @@
 
 #define MAX_MSG_SIZE 4096
 #define CONFIG_FILE "/root/git-clones/cezfuzzer/config.yaml"
+#define LISTEN_PORT 23927
+
 
 /* Functions */
 int init_server();

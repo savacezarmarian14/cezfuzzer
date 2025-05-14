@@ -1,5 +1,9 @@
 FROM python:3.9-slim
 
+# Custom pre-requities
+RUN apt-get update && apt-get install -y libyaml-cpp0.7
+
+
 # Set working directory
 WORKDIR /app
 
@@ -12,4 +16,4 @@ RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
 # Default command to launch the application
-CMD ["/app/bin/fuzzer_1"]
+CMD ["tail", "-f", "/dev/null"]

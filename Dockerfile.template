@@ -1,5 +1,9 @@
 FROM python:3.9-slim
 
+# Custom pre-requities
+RUN apt-get update && apt-get install -y libyaml-cpp0.7
+
+
 # Set working directory
 WORKDIR /app
 
