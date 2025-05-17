@@ -7,8 +7,14 @@ import argparse
 import subprocess
 from colorama import init, Fore, Style
 import json
+import shlex
+import socket
+import struct
 
 
+
+CONFIG_PATH = None
+LAUNCHER_PORT = 23927
 # Initialize colorama for colored terminal output
 init(autoreset=True)
 
@@ -171,6 +177,23 @@ def launch_all_entities(config, standby=True):
 
 import time
 
+
+def build_launcher_cmd(container, launcher, fuzzer_ip=None, extra_args=None):
+    args = [launcher]
+
+    if fuzzer_ip:
+        args.append(fuzzer_ip)
+
+    if extra_args:
+        args.extend(arg for arg in extra_args if arg)
+
+    arg_string = ' '.join(shlex.quote(arg) for arg in args)
+
+    return [
+        "docker", "exec", "-d", container,
+        "sh", "-c", f"{arg_string} > /tmp/launcher.log 2>&1"
+    ]
+
 def run_launcher(config):
     # sort to get fuzzer first (runs server application)
     entities = dict(
@@ -184,16 +207,21 @@ def run_launcher(config):
 
         if ent.get("role") == "fuzzer":
             launcher = "/app/build/luncher/server/server"
-            cmd = [
-                "docker", "exec", "-d", container,
-                "sh", "-c", f"{launcher} > /tmp/launcher.log 2>&1"
-            ]
+            cmd = build_launcher_cmd( 
+                container=container,
+                launcher=launcher,
+                fuzzer_ip=None,
+                extra_args=[CONFIG_PATH]
+            )
+            
         else:
             launcher = "/app/build/luncher/client/client"
-            cmd = [
-                "docker", "exec", "-d", container,
-                "sh", "-c", f"{launcher} {fuzzer_ip} > /tmp/launcher.log 2>&1"
-            ]
+            cmd = build_launcher_cmd( 
+                container=container,
+                launcher=launcher,
+                fuzzer_ip=fuzzer_ip,
+                extra_args=[CONFIG_PATH]
+            )
 
         log_info(f"Starting {launcher} in container '{container}'...")
         print("[debug]", cmd)
@@ -206,6 +234,25 @@ def run_launcher(config):
         if ent.get("role") == "fuzzer":
             time.sleep(0.2)
 
+
+def connect_to_launcher(config):
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    entities = dict(
+        sorted(config.get("entities", {}).items(), key=lambda item: item[1].get("role") != "fuzzer")
+    )
+    launcher_server_IP = next(ent["ip"] for ent in entities.values() if ent.get("role") == "fuzzer")
+    launcher_server_PORT = LAUNCHER_PORT
+
+    client_socket.connect((launcher_server_IP, launcher_server_PORT))
+    print(f"[INFO] Connected to {launcher_server_IP}:{launcher_server_PORT}")
+
+    message =  "[COMMANDER]".encode()
+    message_len = len(message)
+    print("DEBUG", message_len)
+    length_bytes = struct.pack("L", message_len)  # Q = unsigned long long (8 bytes)
+
+    client_socket.sendall(length_bytes)
+    client_socket.sendall(message)
 
 def export_entities_minimal_json(config, output_path="entities_config.json"):
     result = {"udp": {}, "tcp": {}}
@@ -242,6 +289,9 @@ def main():
     parser.add_argument("--standby", action="store_true", help="Start containers in standby mode (no auto-exec)")
     args = parser.parse_args()
 
+    global CONFIG_PATH
+    CONFIG_PATH = args.config
+
     cfg = load_config(args.config)
     export_entities_minimal_json(cfg)
     log_info("Loaded configuration:")
@@ -257,6 +307,9 @@ def main():
     log_info("Building images and launching containers...")
     launch_all_entities(config=cfg)
     run_launcher(config=cfg)
+    # connect_to_launcher(config=cfg)
+    # while(1):
+    #     pass
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,66 @@
+# ✅ TODO – CEZFuzzer Development Plan
+
+## 🧠 Core Components
+
+- [ ] **ExecutionManager**
+  - Inițializare procese (fork/exec)
+  - Suport `exec_with`: `docker`, `python3`, `default`
+  - Suport pentru argumente dinamice
+  - Gestionare exit status + cleanup
+
+- [ ] **LoggerManager**
+  - Flush periodic `stdout` și `stderr`
+  - Scriere în fișier (`/tmp/launcher.log`)
+  - Niveluri de logare: INFO / DEBUG / ERROR
+  - Prefixuri log: `[INFO]`, `[ERROR]` etc.
+
+- [x] **ConfigurationManager**
+  - Parsare `general`, `network`, `entities`
+  - [ ] Validare câmpuri lipsă
+  - [ ] Getter `getFuzzer()` (`std::optional`)
+  - [ ] Getter `getClients()`, `getServers()`, `getHybrids()`
+
+---
+
+## 🧪 Experimental Logic
+
+- [ ] **Fuzzer Integration**
+  - MITM Proxy pentru TCP/UDP
+  - Strategie simplă de fuzzing (ex: random flip, drop, mutate)
+  - Logging per pachet modificat
+  - Feedback loop pentru crash-uri
+
+- [ ] **Client/Server**
+  - Cod minim TCP/UDP + threading
+  - Funcții `send_message()`, `recv_message()` comune
+  - Simulare de crash-uri pentru testare
+
+---
+
+## ⚙️ Tooling & Scripts
+
+- [ ] **commander.py**
+  - Argparse complet: `--config`, `--verbose`
+  - `launch_fuzzers()`, `launch_clients()`, `launch_servers()`
+  - Verificare existență fișiere + binare
+
+- [ ] **Docker automation**
+  - Generare automată `Dockerfile.<entity>`
+  - Suport `exec_with: docker`
+  - Configurare automată `iptables` pentru fuzzere
+  - Cleanup script global
+
+---
+
+## 💬 Alte sugestii
+
+- [ ] **Signal Handling (C++)**
+  - `SIGINT` → închidere clean a socketurilor și firelor
+  - Oprire ordonată a tuturor entităților
+
+- [ ] **Test Suite (local sau CI)**
+  - Config minimală de test (`2 entități + fuzzer`)
+  - Verificare:
+    - Conexiune stabilită
+    - Mesaje transmise
+    - Loguri generate

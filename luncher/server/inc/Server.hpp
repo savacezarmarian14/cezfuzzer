@@ -13,11 +13,15 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <sys/select.h>
-#include <yaml-cpp/yaml.h>
+#include "ConfigurationManager.hpp"
+#include "ServerUtils.hpp"
+#include "Messages.h"
 
 #define MAX_MSG_SIZE 4096
 #define CONFIG_FILE "/root/git-clones/cezfuzzer/config.yaml"
 #define LISTEN_PORT 23927
+
+
 
 
 /* Functions */
@@ -34,6 +38,8 @@ void *handle_client_connection(void *arg);
 /* Variables */
 YAML::Node config;
 pthread_t listen_thread;
+utils::ConfigurationManager cm;
+struct client_list client_list;
 
 
 #endif

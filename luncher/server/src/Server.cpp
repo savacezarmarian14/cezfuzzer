@@ -1,5 +1,43 @@
 #include "Server.hpp"
 
+void* flush_thread_func(void* arg) {
+    while (1) {
+        fflush(stdout);
+        fflush(stderr);
+        usleep(500000); // 0.5 secunde = 500.000 microsecunde
+    }
+    return NULL;
+}
+
+void start_flusher_thread() {
+    pthread_t flush_thread;
+    int ret = pthread_create(&flush_thread, NULL, flush_thread_func, NULL);
+    if (ret != 0) {
+        perror("[ERROR] pthread_create (flush thread)");
+    } else {
+        pthread_detach(flush_thread); // rulează în fundal fără să aștepți
+    }
+}
+
+void send_client_ip(int sockfd)
+{
+    struct client_info *ci;
+
+    for (int i = 0; i < client_list.no_clients; ++i) {
+        if (client_list.list[i].sockfd == sockfd) {
+            ci = &client_list.list[i];
+            break;
+        }
+    }
+
+    send_message(sockfd, (void *)ci->clientIP, sizeof(ci->clientIP));
+}
+
+void send_start_signal(int sockfd)
+{
+    int ret;
+    ret = send_message(sockfd, START, strlen(START));
+}
 
 void *handle_client_connection(void *arg)
 {
@@ -7,9 +45,23 @@ void *handle_client_connection(void *arg)
     char buffer[MAX_MSG_SIZE] = {0};
     int ret;
 
+    send_client_ip(client_fd);
+    send_start_signal(client_fd);
+
     while (1) {
+        memset(buffer, 0, MAX_MSG_SIZE);
         ret = recv_message(client_fd, buffer);
         printf("[INFO] Message: %s\n", buffer);
+
+        // if (strncmp(buffer, "[COMMANDER]", strlen("[COMMANDER]")) == 0) {
+        //     for (int i = 0; i < client_list.no_clients; ++i) {
+        //         if (client_list.list[i].sockfd == client_fd) {
+        //             client_list.list[i].isCommander = true;
+        //             printf("[INFO] Commander socket: %d\n", client_fd);
+        //             break;
+        //         }
+        //     }
+        // }
         sleep(1);
         //printf("[INFO] Recieved message: %s\n", buffer);
     }
@@ -39,6 +91,11 @@ void *listen_thread_func(void *arg)
         printf("[INFO] New connection %s:%d\n",
             inet_ntoa(client_address.sin_addr),
             ntohs(client_address.sin_port));
+
+        addNewClient(client_fd, inet_ntoa(client_address.sin_addr),
+            ntohs(client_address.sin_port), &client_list);
+        
+        printf("[INFO] Client added to client list!\n");
         
         pthread_t client_thread;
         ret = pthread_create(&client_thread, NULL, handle_client_connection, (int *) &client_fd);
@@ -128,7 +185,7 @@ ssize_t recv_message(int sockfd, void *buffer)
 
 int init_server()
 {
-    int sockfd;
+    static int sockfd;
     struct sockaddr_in server_addr;
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
@@ -170,8 +227,20 @@ int init_server()
 }
 
 int main(int argc, char *argv[]) {
+    int ret = 0;
+
+    start_flusher_thread();
+
+    cm = utils::ConfigurationManager(argv[1]);
+    if (cm.parse() != true) {
+        printf("[ERROR] utils::ConfigurationManager::parse()\n");
+        exit(-1);
+    }
+    printf("[INFO] Configuration loaded!\n");
+    
     init_server();
-    config = YAML::Load(CONFIG_FILE);
+    printf("[INFO] Server launcher started...\n");
+    
 
     while(1);
     // TODO: De revizuit commander.py pentru a porni serverul care va porni proxiul si clientul care va porni unul din capete

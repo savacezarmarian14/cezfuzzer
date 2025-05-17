@@ -13,6 +13,10 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <sys/select.h>
+#include <vector>
+#include "ConfigurationManager.hpp"
+#include "ExecutionManager.hpp"
+#include "Messages.h"
 
 #define MAX_MSG_SIZE 4096
 
@@ -22,5 +26,12 @@ int start_client();
 
 ssize_t send_message(int sockfd, const void *buffer, size_t len);
 ssize_t recv_message(int sockfd, void *buffer);
+
+/* Variables */
+char IP[16];
+utils::ConfigurationManager cm;
+utils::ExecutionManager em;
+std::vector<utils::EntityConfig> entities;
+
 
 #endif

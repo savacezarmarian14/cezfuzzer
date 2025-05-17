@@ -10,4 +10,8 @@ target_include_directories(client PUBLIC inc)
 target_include_directories(client PUBLIC lib)
 
 # Link against pthread for multithreading support
-target_link_libraries(client pthread)
+target_link_libraries(client PUBLIC pthread)
+
+# Add internal libraries
+target_link_libraries(client PRIVATE utils)
+

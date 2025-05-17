@@ -2,7 +2,6 @@
 file(GLOB_RECURSE SERVER_SRC src/*.cpp)
 file(GLOB_RECURSE SERVER_HEADERS inc/*.hpp)
 
-find_package(yaml-cpp REQUIRED)
 
 # Build the main MITM proxy application as an executable
 add_executable(server ${SERVER_SRC} ${SERVER_HEADERS})
@@ -12,7 +11,10 @@ target_include_directories(server PUBLIC inc)
 target_include_directories(server PUBLIC lib)
 
 # Link against pthread for multithreading support
-target_link_libraries(server pthread)
-# Link against libyaml-cpp
-target_link_libraries(server yaml-cpp)
+target_link_libraries(server PUBLIC pthread)
+
+# Add internal libraries
+target_link_libraries(server PRIVATE utils)
+
+
 
