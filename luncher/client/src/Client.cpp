@@ -23,7 +23,7 @@ void start_flusher_thread() {
 
 void set_entities_list(int sockfd)
 {
-    char buffer[16] = {0};
+    char buffer[64] = {0};
     int ret;
 
     ret = recv_message(sockfd, (void *)buffer);    

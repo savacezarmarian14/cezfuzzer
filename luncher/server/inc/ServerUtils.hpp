@@ -7,7 +7,7 @@
 
 struct client_info {
     int sockfd;
-    char clientIP[16];
+    char clientIP[64];
     unsigned int clientPORT;
     bool isCommander = false;
 };
@@ -17,7 +17,7 @@ struct client_list {
     unsigned int no_clients = 0;
 };
 
-int addNewClient(int sockfd, char clientIP[16], unsigned int clientPORT,
+int addNewClient(int sockfd, char clientIP[64], unsigned int clientPORT,
                  struct client_list *list) 
 {
     // Realocă spațiu pentru un client în plus

@@ -28,7 +28,7 @@ ssize_t send_message(int sockfd, const void *buffer, size_t len);
 ssize_t recv_message(int sockfd, void *buffer);
 
 /* Variables */
-char IP[16];
+char IP[64];
 utils::ConfigurationManager cm;
 utils::ExecutionManager em;
 std::vector<utils::EntityConfig> entities;
