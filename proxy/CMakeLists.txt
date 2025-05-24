@@ -1,13 +1,22 @@
-# Collect all C++ source and header files from proxy/src and proxy/inc
+# Colectează toate fișierele cpp/hpp
 file(GLOB_RECURSE PROXY_SRC src/*.cpp)
 file(GLOB_RECURSE PROXY_HEADERS inc/*.hpp)
+file(GLOB_RECURSE PROXY_SRC src/*.cpp lib/*.cpp)  # adaugă lib/*.cpp
+file(GLOB_RECURSE PROXY_HEADERS inc/*.hpp lib/*.hpp)
 
-# Build the main MITM proxy application as an executable
+# Executabilul principal
 add_executable(proxy_fuzzer ${PROXY_SRC} ${PROXY_HEADERS})
 
-# Include the header files from inc/ directory
-target_include_directories(proxy_fuzzer PUBLIC inc)
-target_include_directories(proxy_fuzzer PUBLIC lib)
+# Include directories
+target_include_directories(proxy_fuzzer PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/inc
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib
+)
 
-# Link against pthread for multithreading support
-target_link_libraries(proxy_fuzzer pthread)
+
+
+# Thread support
+target_link_libraries(proxy_fuzzer 
+    pthread
+    yaml-cpp                    
+)

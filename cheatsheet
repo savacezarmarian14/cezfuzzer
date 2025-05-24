@@ -1,0 +1,6 @@
+docker exec -it <container> cat /tmp/launcher.log
+docker exec -it <container> cat/tmp/logs/<entity>.log 
+docker rm -f $(docker ps -q)
+
+
+
