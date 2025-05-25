@@ -32,5 +32,4 @@ ProxyBase::ProxyBase(const char* path)
     udp_handler_->printGraph();
     udp_handler_->printConnectionGraph();
     udp_handler_->startConnectionsThreads();
-    while(1);
 }

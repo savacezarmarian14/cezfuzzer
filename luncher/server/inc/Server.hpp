@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <sys/select.h>
 #include "ConfigurationManager.hpp"
+#include "ExecutionManager.hpp"
 #include "ServerUtils.hpp"
 #include "Messages.h"
 
@@ -39,6 +40,7 @@ void *handle_client_connection(void *arg);
 YAML::Node config;
 pthread_t listen_thread;
 utils::ConfigurationManager cm;
+utils::ExecutionManager em;
 struct client_list client_list;
 
 

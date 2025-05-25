@@ -1,5 +1,17 @@
 #include <iostream>
 #include "ProxyBase.hpp"
+#include <pthread.h>
+#include <unistd.h>
+
+void* flush_thread_func(void* arg) {
+    printf("[DEBUG] Flusher thread started...\n");
+    while (1) {
+        fflush(stdout);
+        fflush(stderr);
+        usleep(500000); // 0.5 secunde = 500.000 microsecunde
+    }
+    return NULL;
+}
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -16,6 +28,16 @@ int main(int argc, char* argv[]) {
         std::cerr << "Eroare la inițializarea ProxyBase: " << ex.what() << std::endl;
         return 1;
     }
+
+    pthread_t flush_thread;
+    int ret = pthread_create(&flush_thread, NULL, flush_thread_func, NULL);
+    if (ret != 0) {
+        perror("[ERROR] pthread_create (flush thread)");
+    } else {
+        pthread_detach(flush_thread);
+    }
+
+    while(1); // FOR THE MOMENT [TODO]
 
     return 0;
 }

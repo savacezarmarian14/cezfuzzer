@@ -40,5 +40,5 @@ entities:
     port: 5050
     fuzzed: true
     exec_with: ""                      
-    binary_path: ./bin/fuzzer_1
+    binary_path: ./build/proxy/proxy_fuzzer
     args: [config.yaml]

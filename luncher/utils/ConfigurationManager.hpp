@@ -56,7 +56,7 @@ public:
     NetworkConfig getNetworkConfig() const;
     std::vector<EntityConfig> getEntities() const;
     std::vector<EntityConfig> getEntities(const char *IP);
-    std::optional<EntityConfig> getFuzzer() const;
+    EntityConfig getFuzzer();
 
 
 private:

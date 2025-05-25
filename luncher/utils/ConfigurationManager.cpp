@@ -102,5 +102,15 @@ std::vector<EntityConfig> ConfigurationManager::getEntities(const char* IP) {
 
     return result;
 }
-
+EntityConfig ConfigurationManager::getFuzzer()
+{
+    EntityConfig result;
+    for (auto& entity : entities_) {
+        if (entity.role == "fuzzer") {
+            result = entity;
+            break;
+        }
+    }
+    return result;
+}
 } // namespace utils

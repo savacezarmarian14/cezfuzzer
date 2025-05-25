@@ -240,6 +240,12 @@ int main(int argc, char *argv[]) {
     
     init_server();
     printf("[INFO] Server launcher started...\n");
+
+    em = utils::ExecutionManager(cm);
+
+    utils::EntityConfig proxyConfig = cm.getFuzzer();
+    em.launchEntity(proxyConfig);
+
     
 
     while(1);
