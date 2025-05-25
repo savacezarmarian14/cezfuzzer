@@ -1,152 +1,143 @@
 #include "UDPHandler.hpp"
-#include <sys/socket.h>
-#include <netinet/in.h>
+
 #include <arpa/inet.h>
+#include <linux/netfilter_ipv4.h>
+#include <netinet/in.h>
+#include <pthread.h>
+#include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <iostream>
-#include <pthread.h>
-#include <error.h>
-#include <string.h>
 
+UDPHandler* UDPHandler::instance_ = nullptr;
+using Endpoint = UDPHandler::Endpoint;
 
 UDPHandler::UDPHandler(const std::vector<utils::EntityConfig>& entities)
-    : entities_(entities) {}
-
-void UDPHandler::buildGraphOnly() {
-    for (const auto& entity : entities_) {
-        Endpoint from = {entity.ip, entity.port};
-
-        for (const auto& dest : entity.destinations) {
-            Endpoint to = {dest.ip, dest.port};
-            graph_[from].push_back(to);
-        }
-    }
+    : entities_(entities) {
+    instance_ = this;
 }
 
-void UDPHandler::printGraph() const {
-    std::cout << "[UDPHandler] Logic Graph:\n";
-    for (const auto& [from, targets] : graph_) {
-        for (const auto& to : targets) {
-            std::cout << "  " << from.first << ":" << from.second
-                      << " --> " << to.first << ":" << to.second << "\n";
-        }
-    }
+UDPHandler* UDPHandler::getInstance() {
+    return instance_;
 }
 
-void UDPHandler::buildConnections() {
-    for (const auto& [from, targets] : graph_) {
-
-        // Creează socket dacă nu există
-        if (socket_map_.find(from) == socket_map_.end()) {
+void UDPHandler::buildFromConnections(const std::vector<utils::Connection>& connections) {
+    for (const auto& conn : connections) {
+        for (int proxy_port : {conn.port_src_proxy, conn.port_dst_proxy}) {
             int sock = socket(AF_INET, SOCK_DGRAM, 0);
             if (sock < 0) {
-                perror("socket");
+                perror("[ERROR] socket");
+                continue;
+            }
+
+            int optval = 1;
+            if (setsockopt(sock, SOL_IP, IP_RECVORIGDSTADDR, &optval, sizeof(optval)) < 0) {
+                perror("[ERROR] setsockopt IP_RECVORIGDSTADDR");
+                close(sock);
                 continue;
             }
 
             sockaddr_in addr{};
             addr.sin_family = AF_INET;
-            addr.sin_port = htons(from.second);
-            addr.sin_addr.s_addr = inet_addr(from.first.c_str());
+            addr.sin_port = htons(proxy_port);
+            addr.sin_addr.s_addr = INADDR_ANY;
 
-            socket_map_[from] = sock;
-        }
-
-        for (const auto& to : targets) {
-            if (socket_map_.find(to) == socket_map_.end()) {
-                int sock = socket(AF_INET, SOCK_DGRAM, 0);
-                if (sock < 0) {
-                    perror("socket");
-                    continue;
-                }
-
-                socket_map_[to] = sock;
+            if (bind(sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
+                perror("[ERROR] bind");
+                close(sock);
+                continue;
             }
 
-            ConnectionKey key{from, to};
-            utils::EntityConfig dummy_src{.ip = from.first, .port = from.second};
-            utils::EntityConfig dummy_dst{.ip = to.first, .port = to.second};
+            recv_sockets_.push_back(sock);
+            sock_to_connection_[sock] = conn;
 
-            auto conn = std::make_unique<UDPConnection>(
-                from.first + ":" + std::to_string(from.second) +
-                "_to_" +
-                to.first + ":" + std::to_string(to.second),
-                dummy_src,
-                dummy_dst
-            );
-
-            conn->socket1 = socket_map_[from];
-            conn->socket2 = socket_map_[to];
-
-            connections_[key] = std::move(conn);
+            std::cout << "[UDPHandler] Bound recv socket on proxy port " << proxy_port
+                      << " for " << conn.src_ip << ":" << conn.src_port
+                      << " <-> " << conn.dst_ip << ":" << conn.dst_port << "\n";
         }
     }
 }
 
-void UDPHandler::printConnectionGraph() const 
-{
-    std::cout << "[UDPHandler] Connection Graph:\n";
-    for (const auto& [key, conn] : connections_) {
-        std::cout << "  " << key.from.first << ":" << key.from.second;
-
-        if (auto it = socket_map_.find(key.from); it != socket_map_.end())
-            std::cout << " [sock: " << it->second << "]";
-        else
-            std::cout << " [sock: not found]";
-
-        std::cout << " --> " << key.to.first << ":" << key.to.second;
-
-        if (auto it = socket_map_.find(key.to); it != socket_map_.end())
-            std::cout << " [sock: " << it->second << "]";
-        else
-            std::cout << " [sock: not found]";
-
-        std::cout << "\n";
-    }
-}
-
-void* socketRecvThread(void* arg)
-{
+static void* socketRecvThread(void* arg) {
     int sock = *static_cast<int*>(arg);
-    delete static_cast<int*>(arg); // release dynamic memory
+    delete static_cast<int*>(arg);
 
-    printf("[DEBUG] socketRecvThread started on socket %d\n", sock);
+    const auto& sock_map = UDPHandler::getInstance()->sock_to_connection_;
+    auto conn_it = sock_map.find(sock);
+    if (conn_it != sock_map.end()) {
+        const auto& conn = conn_it->second;
+        printf("[THREAD] Started recv thread on sock %d for connection [%s:%d <-> %s:%d]\n",
+               sock, conn.src_ip.c_str(), conn.src_port, conn.dst_ip.c_str(), conn.dst_port);
+    } else {
+        printf("[THREAD] Started recv thread on sock %d (connection unknown)\n", sock);
+    }
 
     char buffer[4096];
-    struct sockaddr_in src_addr;
-    socklen_t addrlen = sizeof(src_addr);
+    char cmsgbuf[512];
 
-    while (1) {
-        ssize_t len = recvfrom(sock, buffer, sizeof(buffer), 0,
-                               (struct sockaddr*)&src_addr, &addrlen);
+    struct sockaddr_in src_addr;
+    struct iovec iov = { .iov_base = buffer, .iov_len = sizeof(buffer) };
+    struct msghdr msg = {
+        .msg_name = &src_addr,
+        .msg_namelen = sizeof(src_addr),
+        .msg_iov = &iov,
+        .msg_iovlen = 1,
+        .msg_control = cmsgbuf,
+        .msg_controllen = sizeof(cmsgbuf),
+        .msg_flags = 0
+    };
+
+    while (true) {
+        ssize_t len = recvmsg(sock, &msg, 0);
         if (len < 0) {
-            perror("[ERROR] recvfrom failed");
+            perror("[ERROR] recvmsg failed");
             continue;
         }
 
-        printf("[DEBUG] Received %zd bytes on socket %d\n", len, sock);
+        char src_ip[INET_ADDRSTRLEN], dst_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(src_addr.sin_addr), src_ip, sizeof(src_ip));
+        int src_port = ntohs(src_addr.sin_port);
 
-        // TODO: enqueue to fuzz/send logic
+        struct sockaddr_in orig_dst{};
+        bool got_dst = false;
+
+        for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+             cmsg != nullptr;
+             cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+            if (cmsg->cmsg_level == SOL_IP && cmsg->cmsg_type == IP_ORIGDSTADDR) {
+                memcpy(&orig_dst, CMSG_DATA(cmsg), sizeof(orig_dst));
+                got_dst = true;
+                break;
+            }
+        }
+
+        if (!got_dst) {
+            printf("[WARN] Missing ORIGDSTADDR on sock %d\n", sock);
+            continue;
+        }
+
+        inet_ntop(AF_INET, &orig_dst.sin_addr, dst_ip, sizeof(dst_ip));
+        int dst_port = ntohs(orig_dst.sin_port);
+
+        printf("[RECV] [%s:%d → %s:%d] %zd bytes on sock %d\n",
+               src_ip, src_port, dst_ip, dst_port, len, sock);
     }
 
-    return NULL;
+    return nullptr;
 }
 
-void UDPHandler::startConnectionsThreads()
-{
-    for (const auto& [endpoint, sock] : socket_map_) {
-        int* socket_ptr = new int(sock); // dynamic allocation for pthread argument
-
+void UDPHandler::startRecvThreads() {
+    for (int sock : recv_sockets_) {
         pthread_t thread;
-        int ret = pthread_create(&thread, nullptr, socketRecvThread, socket_ptr);
+        int* sock_ptr = new int(sock);
+        int ret = pthread_create(&thread, nullptr, socketRecvThread, sock_ptr);
         if (ret != 0) {
-            printf("[ERROR] Failed to create thread for socket %d: %s\n", sock, strerror(ret));
-            delete socket_ptr;
+            perror("[ERROR] pthread_create failed");
+            delete sock_ptr;
             continue;
         }
-
-        printf("[DEBUG] Started thread for socket %d\n", sock);
-
-        thread_ids_.push_back((int)(uintptr_t)thread); // cast to int explicitly
+        threads_.push_back(thread);
     }
+
+    printf("[INFO] Launched %zu UDP recv threads.\n", recv_sockets_.size());
 }

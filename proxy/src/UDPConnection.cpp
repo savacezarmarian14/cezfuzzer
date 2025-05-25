@@ -11,12 +11,7 @@ UDPConnection::UDPConnection(const std::string& name,
     : Connection(name, e1, e2) {}
 
 void UDPConnection::init() {
-    socket1 = socket(AF_INET, SOCK_DGRAM, 0);
-    socket2 = socket(AF_INET, SOCK_DGRAM, 0);
-
-    if (socket1 < 0 || socket2 < 0) {
-        throw std::runtime_error("Failed to create UDP sockets");
-    }
+    
 }
 
 void UDPConnection::run() {

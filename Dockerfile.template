@@ -1,17 +1,29 @@
 FROM python:3.9-slim
 
-# Custom pre-requities
-RUN apt-get update && apt-get install -y libyaml-cpp0.7
+# Instalare pachete esențiale pentru TPROXY, debugging și YAML
+RUN apt-get update && \
+    apt-get install -y \
+        libyaml-cpp0.7 \
+        iptables \
+        iproute2 \
+        iputils-ping \
+        net-tools \
+        procps \
+        tcpdump \
+        curl \
+        vim \
+        less \
+        nano && \
+    apt-get clean
 
-
-# Set working directory
+# Setare director de lucru
 WORKDIR /app
 
-# Copy entire project into the container
+# Copiere cod sursă
 COPY . /app
 
-# Run entrypoint script (generates iptables rules then execs CMD)
+# Scriptul de entrypoint (va genera regulile iptables & tproxy)
 # <ENTRYPOINT>
 
-# Default command to launch the application
+# Comanda implicită (va fi suprascrisă din commander.py)
 # <EXEC_COMMAND>

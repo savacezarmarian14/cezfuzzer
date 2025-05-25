@@ -4,7 +4,7 @@
 
 namespace utils {
 
-    ConfigurationManager::ConfigurationManager(const std::string& config_path)
+ConfigurationManager::ConfigurationManager(const std::string& config_path)
     : path_(config_path) {}
 
 bool ConfigurationManager::parse() {
@@ -32,11 +32,7 @@ bool ConfigurationManager::parse() {
                 const YAML::Node& data = it.second;
 
                 entity.role = data["role"].as<std::string>();
-                if (data["protocol"]) {
-                    entity.protocol = data["protocol"].as<std::string>();
-                } else {
-                    entity.protocol = "";
-                }
+                entity.protocol = data["protocol"] ? data["protocol"].as<std::string>() : "";
                 entity.ip = data["ip"].as<std::string>();
                 entity.port = data["port"].as<int>();
                 entity.fuzzed = data["fuzzed"].as<bool>();
@@ -65,6 +61,19 @@ bool ConfigurationManager::parse() {
                     entity.connect_to = conn;
                 }
 
+                if (data["connections"]) {
+                    for (const auto& cnode : data["connections"]) {
+                        Connection c;
+                        c.src_ip = cnode["src_ip"].as<std::string>();
+                        c.src_port = cnode["src_port"].as<int>();
+                        c.port_src_proxy = cnode["port_src_proxy"].as<int>();
+                        c.dst_ip = cnode["dst_ip"].as<std::string>();
+                        c.dst_port = cnode["dst_port"].as<int>();
+                        c.port_dst_proxy = cnode["port_dst_proxy"].as<int>();
+                        entity.connections.push_back(c);
+                    }
+                }
+
                 entities_.push_back(entity);
                 if (entity.role == "fuzzer") {
                     fuzzer_ = entity;
@@ -91,15 +100,25 @@ NetworkConfig ConfigurationManager::getNetworkConfig() const {
 std::vector<EntityConfig> ConfigurationManager::getEntities() const {
     return entities_;
 }
+
 std::vector<EntityConfig> ConfigurationManager::getEntities(const char* IP) {
     std::vector<EntityConfig> result;
-
     for (const auto& entity : entities_) {
         if (strcmp(entity.ip.c_str(), IP) == 0) {
             result.push_back(entity);
         }
     }
+    return result;
+}
 
+EntityConfig ConfigurationManager::getFuzzer() {
+    EntityConfig result;
+    for (const auto& entity : entities_) {
+        if (entity.role == "fuzzer") {
+            result = entity;
+            break;
+        }
+    }
     return result;
 }
 

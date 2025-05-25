@@ -4,11 +4,11 @@
 ProxyBase::ProxyBase(const char* path)
 {
     cm = utils::ConfigurationManager(path);
-     if (cm.parse() != true) {
+    if (!cm.parse()) {
         printf("[ERROR] utils::ConfigurationManager::parse()\n");
         exit(-1);
     }
-    
+
     std::vector<utils::EntityConfig> entities = cm.getEntities();
 
     for (const auto& entity : entities) {
@@ -26,10 +26,10 @@ ProxyBase::ProxyBase(const char* path)
         printf("[ProxyBase] TCP entity: %s\n", entity.name.c_str());
     }
 
+    // Folosim direct fuzzer-ul din config
+    utils::EntityConfig fuzzer = cm.getFuzzer();
+
     udp_handler_ = std::make_unique<UDPHandler>(udp_entities);
-    udp_handler_->buildGraphOnly();
-    udp_handler_->buildConnections();
-    udp_handler_->printGraph();
-    udp_handler_->printConnectionGraph();
-    udp_handler_->startConnectionsThreads();
+    udp_handler_->buildFromConnections(fuzzer.connections);
+    udp_handler_->startRecvThreads();
 }

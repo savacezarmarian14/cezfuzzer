@@ -18,6 +18,16 @@ struct ConnectTo {
     int port;
 };
 
+struct Connection {
+    std::string src_ip;
+    int src_port;
+    int port_src_proxy;
+
+    std::string dst_ip;
+    int dst_port;
+    int port_dst_proxy;
+};
+
 struct EntityConfig {
     std::string name;
     std::string role;
@@ -32,6 +42,7 @@ struct EntityConfig {
     // Optional
     std::vector<Destination> destinations;
     std::optional<ConnectTo> connect_to;
+    std::vector<Connection> connections;
 };
 
 struct GeneralConfig {
@@ -56,7 +67,7 @@ public:
     NetworkConfig getNetworkConfig() const;
     std::vector<EntityConfig> getEntities() const;
     std::vector<EntityConfig> getEntities(const char *IP);
-    std::optional<EntityConfig> getFuzzer() const;
+    EntityConfig getFuzzer();
 
 
 private:

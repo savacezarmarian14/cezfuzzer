@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
 cheatsheet developer
+config copy.yaml
+docker/*
+commander/__pycache__/
 
 # Compiled Object files
 *.slo
