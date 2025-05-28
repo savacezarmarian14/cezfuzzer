@@ -1,8 +1,7 @@
 #include "ProxyBase.hpp"
 #include <cstdio>
 
-ProxyBase::ProxyBase(const char* path)
-{
+ProxyBase::ProxyBase(const char* path) {
     cm = utils::ConfigurationManager(path);
     if (!cm.parse()) {
         printf("[ERROR] utils::ConfigurationManager::parse()\n");

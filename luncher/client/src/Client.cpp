@@ -13,7 +13,7 @@ void* flush_thread_func(void* arg) {
 
 void start_flusher_thread() {
     pthread_t flush_thread;
-    int ret = pthread_create(&flush_thread, NULL, flush_thread_func, NULL);
+    int       ret = pthread_create(&flush_thread, NULL, flush_thread_func, NULL);
     if (ret != 0) {
         perror("[ERROR] pthread_create (flush thread)");
     } else {
@@ -21,12 +21,11 @@ void start_flusher_thread() {
     }
 }
 
-void set_entities_list(int sockfd)
-{
+void set_entities_list(int sockfd) {
     char buffer[64] = {0};
-    int ret;
+    int  ret;
 
-    ret = recv_message(sockfd, (void *)buffer);    
+    ret = recv_message(sockfd, (void*) buffer);
     strcpy(IP, buffer);
     printf("[INFO] Client IP: %s. Setting entities list...\n", buffer);
 
@@ -37,23 +36,20 @@ void set_entities_list(int sockfd)
     }
 }
 
-void start_entities()
-{
+void start_entities() {
     for (auto& entity : entities) {
         em.launchEntity(entity);
     }
 }
-void multiplex_message(char *buffer)
-{
+void multiplex_message(char* buffer) {
     if (strncmp(buffer, START, sizeof(START)) == 0) {
         printf("[INFO] Starting Entities...\n");
         start_entities();
     }
 }
 
-void client_loop(int sockfd)
-{
-    int ret;
+void client_loop(int sockfd) {
+    int  ret;
     char buffer[MAX_MSG_SIZE];
     set_entities_list(sockfd);
 
@@ -64,13 +60,12 @@ void client_loop(int sockfd)
     }
 }
 
-ssize_t send_message(int sockfd, const void *buffer, size_t len)
-{
-    int ret;
-    int bytes_sent, total_bytes;
-    char *buff = (char *) &len;
+ssize_t send_message(int sockfd, const void* buffer, size_t len) {
+    int   ret;
+    int   bytes_sent, total_bytes;
+    char* buff = (char*) &len;
 
-    bytes_sent = 0;
+    bytes_sent  = 0;
     total_bytes = sizeof(len);
 
     while (total_bytes > bytes_sent) {
@@ -82,8 +77,8 @@ ssize_t send_message(int sockfd, const void *buffer, size_t len)
         bytes_sent += ret;
     }
 
-    buff = (char *) buffer;
-    bytes_sent = 0;
+    buff        = (char*) buffer;
+    bytes_sent  = 0;
     total_bytes = len;
 
     while (total_bytes > bytes_sent) {
@@ -98,13 +93,12 @@ ssize_t send_message(int sockfd, const void *buffer, size_t len)
     return len;
 }
 
-ssize_t recv_message(int sockfd, void *buffer)
-{
-    int ret;
-    int bytes_received = 0;
-    int total_bytes = sizeof(size_t);
+ssize_t recv_message(int sockfd, void* buffer) {
+    int    ret;
+    int    bytes_received = 0;
+    int    total_bytes    = sizeof(size_t);
     size_t len;
-    char *buff = (char *) &len;
+    char*  buff = (char*) &len;
 
     // 1. Primește lungimea
     while (bytes_received < total_bytes) {
@@ -124,8 +118,8 @@ ssize_t recv_message(int sockfd, void *buffer)
 
     // 3. Primește mesajul în bufferul static
     bytes_received = 0;
-    total_bytes = len;
-    buff = (char *) buffer;
+    total_bytes    = len;
+    buff           = (char*) buffer;
 
     while (bytes_received < total_bytes) {
         ret = recv(sockfd, buff + bytes_received, total_bytes - bytes_received, 0);
@@ -139,12 +133,11 @@ ssize_t recv_message(int sockfd, void *buffer)
     return len;
 }
 
-int init_client(char* serverIP)
-{
-    int sockfd = 0;
+int init_client(char* serverIP) {
+    int                sockfd = 0;
     struct sockaddr_in server_addr;
-    socklen_t server_len = sizeof(server_addr);
-    int ret;
+    socklen_t          server_len = sizeof(server_addr);
+    int                ret;
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
@@ -153,28 +146,24 @@ int init_client(char* serverIP)
     }
 
     memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
+    server_addr.sin_family      = AF_INET;
     server_addr.sin_addr.s_addr = inet_addr(serverIP);
-    server_addr.sin_port = htons(LISTEN_PORT);
+    server_addr.sin_port        = htons(LISTEN_PORT);
 
-    ret = connect(sockfd, (struct sockaddr *)&server_addr, server_len);
+    ret = connect(sockfd, (struct sockaddr*) &server_addr, server_len);
     if (ret < 0) {
         perror("[ERROR] connect()");
         exit(EXIT_FAILURE);
     }
 
     printf("[INFO] Connection established! Start transfering data...\n");
-     (sockfd);
-
-     
-
+    (sockfd);
 
     return sockfd;
 }
 
-int main(int argc, char *argv[])
-{
-    char *server_addr = argv[1];
+int main(int argc, char* argv[]) {
+    char* server_addr = argv[1];
 
     start_flusher_thread();
 
@@ -192,6 +181,6 @@ int main(int argc, char *argv[])
     client_loop(sockfd);
 
     printf("[INFO] Client launcher started...");
-    
+
     return 0;
 }

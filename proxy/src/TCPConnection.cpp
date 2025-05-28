@@ -5,9 +5,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-TCPConnection::TCPConnection(const std::string& name,
-                             const utils::EntityConfig& e1,
-                             const utils::EntityConfig& e2)
+TCPConnection::TCPConnection(const std::string& name, const utils::EntityConfig& e1, const utils::EntityConfig& e2)
     : Connection(name, e1, e2) {}
 
 void TCPConnection::init() {

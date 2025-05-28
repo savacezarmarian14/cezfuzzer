@@ -22,26 +22,21 @@
 #define CONFIG_FILE "/root/git-clones/cezfuzzer/config.yaml"
 #define LISTEN_PORT 23927
 
-
-
-
 /* Functions */
 int init_server();
 int start_server();
 
-ssize_t send_message(int sockfd, const void *buffer, size_t len);
-ssize_t recv_message(int sockfd, void *buffer);
+ssize_t send_message(int sockfd, const void* buffer, size_t len);
+ssize_t recv_message(int sockfd, void* buffer);
 
-
-void *listen_thread_func(void *arg);
-void *handle_client_connection(void *arg);
+void* listen_thread_func(void* arg);
+void* handle_client_connection(void* arg);
 
 /* Variables */
-YAML::Node config;
-pthread_t listen_thread;
+YAML::Node                  config;
+pthread_t                   listen_thread;
 utils::ConfigurationManager cm;
-utils::ExecutionManager em;
-struct client_list client_list;
-
+utils::ExecutionManager     em;
+struct client_list          client_list;
 
 #endif

@@ -9,7 +9,7 @@
 #include "ConfigurationManager.hpp"
 
 class UDPHandler {
-public:
+  public:
     using Endpoint = std::pair<std::string, int>;
 
     explicit UDPHandler(const std::vector<utils::EntityConfig>& entities);
@@ -17,13 +17,13 @@ public:
     void buildFromConnections(const std::vector<utils::Connection>& connections);
     void startRecvThreads();
 
-    static UDPHandler* instance_;
-    static UDPHandler* getInstance();
-    std::map<int, utils::Connection> sock_to_connection_;  // sockfd -> connection
-    FuzzerCore fuzzer;
+    static UDPHandler*               instance_;
+    static UDPHandler*               getInstance();
+    std::map<int, utils::Connection> sock_to_connection_; // sockfd -> connection
+    FuzzerCore                       fuzzer;
 
-private:
+  private:
     std::vector<utils::EntityConfig> entities_;
-    std::vector<int> recv_sockets_;
-    std::vector<pthread_t> threads_;
+    std::vector<int>                 recv_sockets_;
+    std::vector<pthread_t>           threads_;
 };

@@ -30,14 +30,15 @@ int main(int argc, char* argv[]) {
     }
 
     pthread_t flush_thread;
-    int ret = pthread_create(&flush_thread, NULL, flush_thread_func, NULL);
+    int       ret = pthread_create(&flush_thread, NULL, flush_thread_func, NULL);
     if (ret != 0) {
         perror("[ERROR] pthread_create (flush thread)");
     } else {
         pthread_detach(flush_thread);
     }
 
-    while(1); // FOR THE MOMENT [TODO]
+    while (1)
+        ; // FOR THE MOMENT [TODO]
 
     return 0;
 }
