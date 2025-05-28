@@ -11,16 +11,16 @@ entities:
     connections:
     - src_ip: 192.168.1.10
       src_port: 5000
-      port_src_proxy: 34726
+      port_src_proxy: 51379
       dst_ip: 192.168.1.11
       dst_port: 5001
-      port_dst_proxy: 50717
+      port_dst_proxy: 20953
     - src_ip: 192.168.1.10
       src_port: 5000
-      port_src_proxy: 50935
+      port_src_proxy: 57257
       dst_ip: 192.168.1.12
       dst_port: 5000
-      port_dst_proxy: 38980
+      port_dst_proxy: 47742
   udp_entity1:
     args:
     - 192.168.1.10:5000

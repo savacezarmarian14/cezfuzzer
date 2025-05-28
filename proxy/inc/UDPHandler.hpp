@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include "Fuzzer.hpp"
 #include "ConfigurationManager.hpp"
 
 class UDPHandler {
@@ -19,7 +20,7 @@ public:
     static UDPHandler* instance_;
     static UDPHandler* getInstance();
     std::map<int, utils::Connection> sock_to_connection_;  // sockfd -> connection
-
+    FuzzerCore fuzzer;
 
 private:
     std::vector<utils::EntityConfig> entities_;

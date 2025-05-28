@@ -5,14 +5,10 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-UDPConnection::UDPConnection(const std::string& name,
-                             const utils::EntityConfig& e1,
-                             const utils::EntityConfig& e2)
+UDPConnection::UDPConnection(const std::string& name, const utils::EntityConfig& e1, const utils::EntityConfig& e2)
     : Connection(name, e1, e2) {}
 
-void UDPConnection::init() {
-    
-}
+void UDPConnection::init() {}
 
 void UDPConnection::run() {
     // Placeholder - logică viitoare
