@@ -21,22 +21,44 @@ def generate_tproxy_block_from_connections(connections, fuzzer_ip):
     ]
 
     for conn in connections:
-        lines.append(
-            f"iptables -t mangle -A PREROUTING -p udp -s {conn['src_ip']} --dport {conn['dst_port']} "
-            f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_src_proxy']} --tproxy-mark 0x1/0x1"
-        )
-        lines.append(
-            f"iptables -t mangle -A PREROUTING -p udp -s {conn['dst_ip']} --dport {conn['src_port']} "
-            f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_dst_proxy']} --tproxy-mark 0x1/0x1"
-        )
-        lines.append(
-            f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_src_proxy']} "
-            f"-j SNAT --to-source {conn['src_ip']}:{conn['src_port']}"
-        )
-        lines.append(
-            f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_dst_proxy']} "
-            f"-j SNAT --to-source {conn['dst_ip']}:{conn['dst_port']}"
-        )
+        # Trafic A -> B
+        if conn["dst_port"] != -1:
+            lines.append(
+                f"iptables -t mangle -A PREROUTING -p udp -s {conn['src_ip']} --dport {conn['dst_port']} "
+                f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_src_proxy']} --tproxy-mark 0x1/0x1"
+            )
+        else:
+            lines.append(
+                f"iptables -t mangle -A PREROUTING -p udp -s {conn['src_ip']} "
+                f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_src_proxy']} --tproxy-mark 0x1/0x1"
+            )
+
+        # Trafic B -> A
+        if conn["src_port"] != -1:
+            lines.append(
+                f"iptables -t mangle -A PREROUTING -p udp -s {conn['dst_ip']} --dport {conn['src_port']} "
+                f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_dst_proxy']} --tproxy-mark 0x1/0x1"
+            )
+        else:
+            lines.append(
+                f"iptables -t mangle -A PREROUTING -p udp -s {conn['dst_ip']} "
+                f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_dst_proxy']} --tproxy-mark 0x1/0x1"
+            )
+
+        # SNAT rules - doar pentru porturi definite
+        if conn["port_src_proxy"] != -1:
+            src_port = f":{conn['src_port']}" if conn["src_port"] != -1 else ""
+            lines.append(
+                f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_src_proxy']} "
+                f"-j SNAT --to-source {conn['src_ip']}{src_port}"
+            )
+            
+        if conn["port_dst_proxy"] != -1:
+            dst_port = f":{conn['dst_port']}" if conn["dst_port"] != -1 else ""
+            lines.append(
+                f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_dst_proxy']} "
+                f"-j SNAT --to-source {conn['dst_ip']}{dst_port}"
+            )
 
     lines.append("ip rule add fwmark 1 lookup local || true")
     lines.append("# === END TPROXY ===")
@@ -45,17 +67,28 @@ def generate_tproxy_block_from_connections(connections, fuzzer_ip):
 def generate_client_dnat_rules(ip, port, connections, fuzzer):
     lines = []
     for conn in connections:
-        if conn["src_ip"] == ip and conn["src_port"] == port:
-            lines.append(f"""
-# === CLIENT → PROXY DNAT for {conn['dst_ip']}:{conn['dst_port']} ===
-iptables -t nat -A OUTPUT -p udp -d {conn['dst_ip']} --dport {conn['dst_port']} -j DNAT --to-destination {fuzzer['ip']}:{conn['port_src_proxy']}
+        # Caz 1: Entitatea curentă este sursa în conexiune
+        if conn["src_ip"] == ip:
+            # Verificăm dacă portul entității corespunde sau este dinamic
+            if port == -1 or conn["src_port"] == port or conn["src_port"] == -1:
+                # Regulă pentru trafic către destinație
+                dport_condition = f"--dport {conn['dst_port']}" if conn["dst_port"] != -1 else ""
+                lines.append(f"""
+# === CLIENT → PROXY DNAT for {conn['dst_ip']}:{'ANY' if conn['dst_port'] == -1 else conn['dst_port']} ===
+iptables -t nat -A OUTPUT -p udp -d {conn['dst_ip']} {dport_condition} -j DNAT --to-destination {fuzzer['ip']}:{conn['port_src_proxy']}
 iptables -A INPUT -p udp -s {fuzzer['ip']} --sport {conn['port_src_proxy']} -j ACCEPT
 # === END ===
 """)
-        elif conn["dst_ip"] == ip and conn["dst_port"] == port:
-            lines.append(f"""
-# === CLIENT → PROXY DNAT for {conn['src_ip']}:{conn['src_port']} ===
-iptables -t nat -A OUTPUT -p udp -d {conn['src_ip']} --dport {conn['src_port']} -j DNAT --to-destination {fuzzer['ip']}:{conn['port_dst_proxy']}
+
+        # Caz 2: Entitatea curentă este destinația în conexiune
+        if conn["dst_ip"] == ip:
+            # Verificăm dacă portul entității corespunde sau este dinamic
+            if port == -1 or conn["dst_port"] == port or conn["dst_port"] == -1:
+                # Regulă pentru trafic către sursă
+                dport_condition = f"--dport {conn['src_port']}" if conn["src_port"] != -1 else ""
+                lines.append(f"""
+# === CLIENT → PROXY DNAT for {conn['src_ip']}:{'ANY' if conn['src_port'] == -1 else conn['src_port']} ===
+iptables -t nat -A OUTPUT -p udp -d {conn['src_ip']} {dport_condition} -j DNAT --to-destination {fuzzer['ip']}:{conn['port_dst_proxy']}
 iptables -A INPUT -p udp -s {fuzzer['ip']} --sport {conn['port_dst_proxy']} -j ACCEPT
 # === END ===
 """)
@@ -75,7 +108,7 @@ def generate_dockerfile(entity_name, entity_cfg, all_entities, template_path="Do
 
         role = entity_cfg.get("role")
         ip = entity_cfg.get("ip")
-        port = entity_cfg.get("port")
+        port = entity_cfg.get("port", -1)  # Default la -1 dacă nu există
         proto = entity_cfg.get("protocol", "udp").lower()
         is_fuzzed = entity_cfg.get("fuzzed", False)
 

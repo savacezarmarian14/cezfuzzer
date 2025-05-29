@@ -1,7 +1,7 @@
 import argparse
 from .utils import CONFIG_PATH, LAUNCHER_PORT
 from .redirection_injector import inject_fuzzer_redirections
-from .config_loader import load_config, export_entities_minimal_json
+from .config_loader import load_config, normalize_udp_ports
 from .docker_network import create_docker_network
 from .docker_build import generate_dockerfile, generate_all_dockerfiles
 from .docker_launcher import launch_all_entities, run_launcher
@@ -14,14 +14,14 @@ def main():
     parser.add_argument("--standby", action="store_true", help="Start containers in standby mode (no auto-exec)")
     args = parser.parse_args()
 
+    # 0. Normalizarea porturilor
+    normalize_udp_ports(args.config)
+
     # 1. Injectează redirecțiile pentru fuzzer
     inject_fuzzer_redirections(args.config)
 
     # 2. Încarcă configul
     cfg = load_config(args.config)
-
-    # 3. Export JSON auxiliar
-    export_entities_minimal_json(cfg)
 
     # 4. Creează rețea Docker
     create_docker_network(cfg.get("network", {}))
