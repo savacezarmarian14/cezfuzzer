@@ -22,10 +22,12 @@ struct Connection {
     std::string src_ip;
     int         src_port;
     int         port_src_proxy;
+    int         sock_send_to_src; // socket folosit pentru trimitere către src
 
     std::string dst_ip;
     int         dst_port;
     int         port_dst_proxy;
+    int         sock_send_to_dst; // socket folosit pentru trimitere către dst
 };
 
 struct EntityConfig {

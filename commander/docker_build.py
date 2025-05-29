@@ -21,7 +21,7 @@ def generate_tproxy_block_from_connections(connections, fuzzer_ip):
     ]
 
     for conn in connections:
-        # Trafic A -> B
+        # Reguli pentru trafic A -> B
         if conn["dst_port"] != -1:
             lines.append(
                 f"iptables -t mangle -A PREROUTING -p udp -s {conn['src_ip']} --dport {conn['dst_port']} "
@@ -33,7 +33,7 @@ def generate_tproxy_block_from_connections(connections, fuzzer_ip):
                 f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_src_proxy']} --tproxy-mark 0x1/0x1"
             )
 
-        # Trafic B -> A
+        # Reguli pentru trafic B -> A
         if conn["src_port"] != -1:
             lines.append(
                 f"iptables -t mangle -A PREROUTING -p udp -s {conn['dst_ip']} --dport {conn['src_port']} "
@@ -45,19 +45,27 @@ def generate_tproxy_block_from_connections(connections, fuzzer_ip):
                 f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_dst_proxy']} --tproxy-mark 0x1/0x1"
             )
 
-        # SNAT rules - doar pentru porturi definite
-        if conn["port_src_proxy"] != -1:
-            src_port = f":{conn['src_port']}" if conn["src_port"] != -1 else ""
+        # Reguli SNAT
+        if conn["src_port"] != -1:
             lines.append(
                 f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_src_proxy']} "
-                f"-j SNAT --to-source {conn['src_ip']}{src_port}"
+                f"-j SNAT --to-source {conn['src_ip']}:{conn['src_port']}"
+            )
+        else:
+            lines.append(
+                f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_src_proxy']} "
+                f"-j SNAT --to-source {conn['src_ip']}"
             )
             
-        if conn["port_dst_proxy"] != -1:
-            dst_port = f":{conn['dst_port']}" if conn["dst_port"] != -1 else ""
+        if conn["dst_port"] != -1:
             lines.append(
                 f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_dst_proxy']} "
-                f"-j SNAT --to-source {conn['dst_ip']}{dst_port}"
+                f"-j SNAT --to-source {conn['dst_ip']}:{conn['dst_port']}"
+            )
+        else:
+            lines.append(
+                f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_dst_proxy']} "
+                f"-j SNAT --to-source {conn['dst_ip']}"
             )
 
     lines.append("ip rule add fwmark 1 lookup local || true")
