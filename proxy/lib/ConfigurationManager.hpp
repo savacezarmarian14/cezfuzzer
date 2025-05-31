@@ -4,6 +4,8 @@
 #include <vector>
 #include <map>
 #include <optional>
+#include <mutex>
+#include <queue>
 #include <yaml-cpp/yaml.h>
 
 namespace utils {
@@ -19,15 +21,21 @@ struct ConnectTo {
 };
 
 struct Connection {
-    std::string src_ip;
-    int         src_port;
-    int         port_src_proxy;
-    int         sock_send_to_src; // socket folosit pentru trimitere către src
+    // Entity A
+    std::string entityA_ip;
+    int         entityA_port;
+    int         entityA_proxy_port_recv; // bound with IP_RECVORIGDSTADDR
+    int         entityA_proxy_port_send; // bound with IP_TRANSPARENT
+    int         recv_sock_from_entityA = -1;
+    int         send_sock_to_entityA   = -1;
 
-    std::string dst_ip;
-    int         dst_port;
-    int         port_dst_proxy;
-    int         sock_send_to_dst; // socket folosit pentru trimitere către dst
+    // Entity B
+    std::string entityB_ip;
+    int         entityB_port;
+    int         entityB_proxy_port_recv;
+    int         entityB_proxy_port_send;
+    int         recv_sock_from_entityB = -1;
+    int         send_sock_to_entityB   = -1;
 };
 
 struct EntityConfig {

@@ -1,5 +1,6 @@
 #include "ProxyBase.hpp"
 #include <cstdio>
+#include <string.h>
 
 ProxyBase::ProxyBase(const char* path) {
     cm = utils::ConfigurationManager(path);
@@ -26,9 +27,11 @@ ProxyBase::ProxyBase(const char* path) {
     }
 
     // Folosim direct fuzzer-ul din config
-    utils::EntityConfig fuzzer = cm.getFuzzer();
+    utils::EntityConfig fuzzer  = cm.getFuzzer();
+    char*               proxyIP = strdup(fuzzer.ip.c_str());
 
-    udp_handler_ = std::make_unique<UDPHandler>(udp_entities);
+    udp_handler_ = std::make_unique<UDPHandler>(udp_entities, proxyIP);
     udp_handler_->buildFromConnections(fuzzer.connections);
     udp_handler_->startRecvThreads();
+    udp_handler_->startSendThreads();
 }

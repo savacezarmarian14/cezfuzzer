@@ -1,29 +1,50 @@
-#pragma once
+#ifndef UDP_HANDLER_HPP
+#define UDP_HANDLER_HPP
 
 #include <vector>
-#include <map>
-#include <memory>
+#include <unordered_map>
 #include <string>
-#include <utility>
-#include "Fuzzer.hpp"
+#include <pthread.h>
+#include <memory>
+
+#include "UDPConnection.hpp"
 #include "ConfigurationManager.hpp"
+#include "Fuzzer.hpp"
 
 class UDPHandler {
   public:
-    using Endpoint = std::pair<std::string, int>;
+    static UDPHandler* getInstance();
+    UDPHandler(const std::vector<utils::EntityConfig>& entities, char* ip);
 
-    explicit UDPHandler(const std::vector<utils::EntityConfig>& entities);
-
-    void buildFromConnections(const std::vector<utils::Connection>& connections);
+    void buildFromConnections(std::vector<utils::Connection>& connections);
     void startRecvThreads();
+    void startSendThreads();
 
-    static UDPHandler*               instance_;
-    static UDPHandler*               getInstance();
-    std::map<int, utils::Connection> sock_to_connection_; // sockfd -> connection
-    FuzzerCore                       fuzzer;
+    // Getteri
+    const std::vector<int>&                        getRecvSockets() const;
+    const std::vector<UDPConnection*>&             getConnections() const;
+    const std::unordered_map<int, UDPConnection*>& getSocketToConnectionMap() const;
 
   private:
+    static UDPHandler* instance_;
+
     std::vector<utils::EntityConfig> entities_;
-    std::vector<int>                 recv_sockets_;
-    std::vector<pthread_t>           threads_;
+    std::string                      proxyIP_;
+    FuzzerCore                       fuzzer;
+
+    std::vector<int> recv_sockets_;
+    std::vector<int> send_sockets_;
+
+    std::vector<pthread_t>                  threads_;
+    std::vector<UDPConnection*>             connections_;
+    std::unordered_map<int, UDPConnection*> sock_to_connection_;
+
+    int  createAndBindSocket(int port, bool transparent);
+    void setupUDPConnection(std::unique_ptr<UDPConnection> conn);
+
+    friend void* socketRecvThread(void* arg);
+    static void* recvThreadEntry(void* arg);
+    static void* sendThreadEntry(void* arg);
 };
+
+#endif // UDP_HANDLER_HPP

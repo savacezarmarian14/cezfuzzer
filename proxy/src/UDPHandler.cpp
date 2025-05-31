@@ -1,203 +1,366 @@
 #include "UDPHandler.hpp"
-#include "Fuzzer.hpp"
+#include "UDPConnection.hpp"
 
 #include <arpa/inet.h>
 #include <linux/netfilter_ipv4.h>
 #include <netinet/in.h>
-#include <pthread.h>
-#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <string.h>
 #include <iostream>
 
-/// TODO TO ADD IN LOGGER IN THE FUTURE
-void printTextAndHex(const char* label, const uint8_t* data, size_t size) {
-    printf("[%s] ", label);
-    for (size_t i = 0; i < size; ++i) {
-        printf("%02X ", data[i]);
-    }
-    printf("\n");
-
-    printf("[%s_TEXT] ", label);
-    for (size_t i = 0; i < size; ++i) {
-        if (data[i] >= 32 && data[i] <= 126)
-            printf("%c", data[i]);
-        else
-            printf(".");
-    }
-    printf("\n\n");
-}
-
 UDPHandler* UDPHandler::instance_ = nullptr;
-using Endpoint                    = UDPHandler::Endpoint;
 
-UDPHandler::UDPHandler(const std::vector<utils::EntityConfig>& entities) : entities_(entities) {
+UDPHandler::UDPHandler(const std::vector<utils::EntityConfig>& entities, char* ip)
+    : entities_(entities), proxyIP_(ip), fuzzer(FUZZSTYLE_RANDOMIZATION) {
     instance_ = this;
-    fuzzer    = FuzzerCore(FUZZSTYLE_RANDOMIZATION);
+    std::cout << "[DEBUG] UDPHandler initialized with proxy IP: " << proxyIP_ << std::endl;
 }
 
 UDPHandler* UDPHandler::getInstance() {
     return instance_;
 }
 
-void UDPHandler::buildFromConnections(const std::vector<utils::Connection>& connections) {
-    for (const auto& conn : connections) {
-        for (int proxy_port : {conn.port_src_proxy, conn.port_dst_proxy}) {
-            int sock = socket(AF_INET, SOCK_DGRAM, 0);
-            if (sock < 0) {
-                perror("[ERROR] socket");
-                continue;
-            }
+int UDPHandler::createAndBindSocket(int port, bool useTransparent) {
+    std::cout << "[DEBUG] Creating UDP socket on port " << port << " with "
+              << (useTransparent ? "IP_TRANSPARENT" : "IP_RECVORIGDSTADDR") << std::endl;
 
-            int optval = 1;
-            if (setsockopt(sock, SOL_IP, IP_RECVORIGDSTADDR, &optval, sizeof(optval)) < 0) {
-                perror("[ERROR] setsockopt IP_RECVORIGDSTADDR");
-                close(sock);
-                continue;
-            }
-
-            sockaddr_in addr{};
-            addr.sin_family      = AF_INET;
-            addr.sin_port        = htons(proxy_port);
-            addr.sin_addr.s_addr = INADDR_ANY;
-
-            if (bind(sock, (sockaddr*) &addr, sizeof(addr)) < 0) {
-                perror("[ERROR] bind");
-                close(sock);
-                continue;
-            }
-
-            recv_sockets_.push_back(sock);
-            sock_to_connection_[sock] = conn;
-
-            std::cout << "[UDPHandler] Bound recv socket on proxy port " << proxy_port << " for " << conn.src_ip << ":"
-                      << conn.src_port << " <-> " << conn.dst_ip << ":" << conn.dst_port << "\n";
-        }
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0) {
+        perror("[ERROR] socket");
+        return -1;
     }
+
+    int optval  = 1;
+    int optname = useTransparent ? IP_TRANSPARENT : IP_RECVORIGDSTADDR;
+    if (setsockopt(sock, SOL_IP, optname, &optval, sizeof(optval)) < 0) {
+        perror("[ERROR] setsockopt");
+        close(sock);
+        return -1;
+    }
+
+    sockaddr_in addr{};
+    addr.sin_family      = AF_INET;
+    addr.sin_port        = htons(port);
+    addr.sin_addr.s_addr = inet_addr(proxyIP_.c_str());
+
+    if (bind(sock, (sockaddr*) &addr, sizeof(addr)) < 0) {
+        perror("[ERROR] bind");
+        close(sock);
+        return -1;
+    }
+
+    std::cout << "[DEBUG] Socket bound successfully to " << proxyIP_ << ":" << port << std::endl;
+    return sock;
 }
 
-static void* socketRecvThread(void* arg) {
-    int sock = *static_cast<int*>(arg);
-    delete static_cast<int*>(arg);
+void UDPHandler::buildFromConnections(std::vector<utils::Connection>& conns) {
+    std::cout << "[DEBUG] Starting to build connections..." << std::endl;
 
-    const auto& sock_map = UDPHandler::getInstance()->sock_to_connection_;
-    auto        conn_it  = sock_map.find(sock);
-    if (conn_it == sock_map.end()) {
-        printf("[THREAD] Unknown socket %d\n", sock);
-        return nullptr;
-    }
+    for (const auto& conn_struct : conns) {
+        std::unique_ptr<UDPConnection> conn = std::make_unique<UDPConnection>(conn_struct);
 
-    const auto& conn = conn_it->second;
-    printf("[THREAD] Started recv thread on sock %d for connection [%s:%d <-> %s:%d]\n", sock, conn.src_ip.c_str(),
-           conn.src_port, conn.dst_ip.c_str(), conn.dst_port);
+        int recvA = createAndBindSocket(conn->getEntityARecvPort(), false);
+        int sendB = createAndBindSocket(conn->getEntityBSendPort(), true);
+        int recvB = createAndBindSocket(conn->getEntityBRecvPort(), false);
+        int sendA = createAndBindSocket(conn->getEntityASendPort(), true);
 
-    char buffer[4096];
-    char cmsgbuf[512];
+        if (recvA >= 0 && sendB >= 0 && recvB >= 0 && sendA >= 0) {
+            conn->setRecvSockFromEntityA(recvA);
+            conn->setSendSockToEntityB(sendB);
+            conn->setRecvSockFromEntityB(recvB);
+            conn->setSendSockToEntityA(sendA);
 
-    struct sockaddr_in src_addr;
-    struct iovec       iov = {.iov_base = buffer, .iov_len = sizeof(buffer)};
-    struct msghdr      msg = {.msg_name       = &src_addr,
-                              .msg_namelen    = sizeof(src_addr),
-                              .msg_iov        = &iov,
-                              .msg_iovlen     = 1,
-                              .msg_control    = cmsgbuf,
-                              .msg_controllen = sizeof(cmsgbuf),
-                              .msg_flags      = 0};
+            sock_to_connection_[recvA] = conn.get();
+            sock_to_connection_[recvB] = conn.get();
 
-    while (true) {
-        ssize_t len = recvmsg(sock, &msg, 0);
-        if (len < 0) {
-            perror("[ERROR] recvmsg failed");
-            continue;
-        }
+            recv_sockets_.push_back(recvA);
+            recv_sockets_.push_back(recvB);
 
-        char src_ip[INET_ADDRSTRLEN], dst_ip[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(src_addr.sin_addr), src_ip, sizeof(src_ip));
-        int src_port = ntohs(src_addr.sin_port);
+            sock_to_connection_[sendA] = conn.get();
+            sock_to_connection_[sendB] = conn.get();
 
-        struct sockaddr_in orig_dst {};
-        bool               got_dst = false;
+            send_sockets_.push_back(sendA);
+            send_sockets_.push_back(sendB);
 
-        for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg); cmsg != nullptr; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
-            if (cmsg->cmsg_level == SOL_IP && cmsg->cmsg_type == IP_ORIGDSTADDR) {
-                memcpy(&orig_dst, CMSG_DATA(cmsg), sizeof(orig_dst));
-                got_dst = true;
-                break;
-            }
-        }
-
-        if (!got_dst) {
-            printf("[WARN] Missing ORIGDSTADDR on sock %d\n", sock);
-            continue;
-        }
-
-        inet_ntop(AF_INET, &orig_dst.sin_addr, dst_ip, sizeof(dst_ip));
-        int dst_port = ntohs(orig_dst.sin_port);
-
-        printf("[RECV] [%s:%d → %s:%d] %zd bytes on sock %d\n", src_ip, src_port, dst_ip, dst_port, len, sock);
-
-        // Construim payload modificat
-        std::string payload = "[PROXY] ";
-        payload.append(buffer, len);
-
-        // Determinăm direcția: dacă mesajul vine de la A, trimitem către B
-        std::string target_ip;
-        int         target_port;
-
-        if (src_ip == conn.src_ip && src_port == conn.src_port) {
-            target_ip   = conn.dst_ip;
-            target_port = conn.dst_port;
+            connections_.push_back(conn.release());
+            std::cout << "[INFO] UDPConnection fully initialized and sockets mapped." << std::endl;
         } else {
-            target_ip   = conn.src_ip;
-            target_port = conn.src_port;
+            std::cerr << "[ERROR] Failed to bind all sockets for a connection." << std::endl;
         }
-
-        // Creăm socket temporar pentru trimitere
-        int send_sock = socket(AF_INET, SOCK_DGRAM, 0);
-        if (send_sock < 0) {
-            perror("[ERROR] socket (sendto)");
-            continue;
-        }
-
-        struct sockaddr_in target_addr {};
-        target_addr.sin_family = AF_INET;
-        target_addr.sin_port   = htons(target_port);
-        inet_pton(AF_INET, target_ip.c_str(), &target_addr.sin_addr);
-
-        size_t   fuzzed_payload_len = 0;
-        uint8_t* _uint8_payload     = new uint8_t[MAX_BUFFER_SIZE];
-
-        memcpy(_uint8_payload, payload.data(), payload.size());
-
-        uint8_t* fuzzed_payload =
-            UDPHandler::getInstance()->fuzzer.fullFuzzing(_uint8_payload, payload.size(), fuzzed_payload_len);
-        delete[] _uint8_payload;
-        ssize_t sent = sendto(send_sock, fuzzed_payload, fuzzed_payload_len, 0, (struct sockaddr*) &target_addr,
-                              sizeof(target_addr));
-        if (sent < 0) {
-            perror("[ERROR] sendto");
-        } else {
-            printf("[FORWARD] → %s:%d (%zd bytes)\n", target_ip.c_str(), target_port, sent);
-        }
-
-        close(send_sock); // închidem socket-ul temporar
     }
-
-    return nullptr;
 }
 
 void UDPHandler::startRecvThreads() {
+    std::cout << "[DEBUG] Launching receiver threads for each recv socket..." << std::endl;
+
     for (int sock : recv_sockets_) {
-        pthread_t thread;
-        int*      sock_ptr = new int(sock);
-        int       ret      = pthread_create(&thread, nullptr, socketRecvThread, sock_ptr);
-        if (ret != 0) {
-            perror("[ERROR] pthread_create failed");
-            delete sock_ptr;
+        if (sock_to_connection_.count(sock) == 0) {
+            std::cerr << "[ERROR] No mapping found for socket FD " << sock << std::endl;
             continue;
         }
-        threads_.push_back(thread);
+
+        UDPConnection* conn = sock_to_connection_[sock];
+        pthread_t      tid;
+
+        if (pthread_create(&tid, nullptr, &UDPHandler::recvThreadEntry,
+                           new std::pair<int, UDPConnection*>(sock, conn)) != 0) {
+            perror("[ERROR] pthread_create failed");
+        } else {
+            pthread_detach(tid);
+            std::cout << "[DEBUG] Thread launched for socket FD: " << sock << std::endl;
+        }
     }
 
-    printf("[INFO] Launched %zu UDP recv threads.\n", recv_sockets_.size());
+    std::cout << "[INFO] All UDP recv threads launched." << std::endl;
+}
+
+void* UDPHandler::recvThreadEntry(void* arg) {
+    auto [recv_sock, conn] = *static_cast<std::pair<int, UDPConnection*>*>(arg);
+    delete static_cast<std::pair<int, UDPConnection*>*>(arg);
+
+    // 1) Începem prin a prelua referința la fuzzer
+    UDPHandler* handler = UDPHandler::getInstance();
+    FuzzerCore& fuzzer  = handler->fuzzer;
+
+    char               buffer[4096] = {0};
+    struct sockaddr_in src_addr {};
+    socklen_t          addrlen = sizeof(src_addr);
+
+    std::cout << "[TYPE] [RECV THREAD] Listening on FD " << recv_sock << std::endl;
+
+    while (true) {
+        ssize_t len = recvfrom(recv_sock, buffer, sizeof(buffer), 0, reinterpret_cast<sockaddr*>(&src_addr), &addrlen);
+        if (len <= 0) {
+            perror("[TYPE] [RECV THREAD] recvfrom failed");
+            break;
+        }
+
+        char src_ip[INET_ADDRSTRLEN] = {0};
+        inet_ntop(AF_INET, &src_addr.sin_addr, src_ip, sizeof(src_ip));
+        int src_port = ntohs(src_addr.sin_port);
+
+        printf("[TYPE] [RECV THREAD] Received %zd bytes on socket %d from %s:%u\n", len, recv_sock, src_ip, src_port);
+
+        std::string target_ip;
+        int         target_port = -1;
+        int         send_sock   = -1;
+
+        // Determinăm direcția (A→B sau B→A) și setăm target_ip/target_port/send_sock
+        if (recv_sock == conn->getRecvSockFromEntityA()) {
+            send_sock   = conn->getSendSockToEntityB();
+            target_ip   = conn->getEntityBIP();
+            target_port = conn->getEntityBPort();
+            if (target_port == -1) {
+                conn->popDynamicPort(target_port);
+            }
+            if (conn->getEntityAPort() == -1) {
+                conn->pushDynamicPort(src_port);
+                std::cout << "[TYPE] [RECV THREAD] Stored dynamic port from A: " << src_port << std::endl;
+            }
+        } else if (recv_sock == conn->getRecvSockFromEntityB()) {
+            send_sock   = conn->getSendSockToEntityA();
+            target_ip   = conn->getEntityAIP();
+            target_port = conn->getEntityAPort();
+            if (target_port == -1) {
+                conn->popDynamicPort(target_port);
+            }
+            if (conn->getEntityBPort() == -1) {
+                conn->pushDynamicPort(src_port);
+                std::cout << "[TYPE] [RECV THREAD] Stored dynamic port from B: " << src_port << std::endl;
+            }
+        } else {
+            std::cerr << "[TYPE] [RECV THREAD] recv_sock not recognized in connection." << std::endl;
+            continue;
+        }
+
+        std::cout << "[TYPE] [RECV THREAD] Forwarding " << len << " bytes from " << src_ip << ":" << src_port << " to "
+                  << target_ip << ":" << target_port << std::endl;
+
+        // === AICI înserezi apelul la fuzzer ===
+        // 2) Copiem datele primite într-un buffer temporar (uint8_t*),
+        //    apoi apelăm, de exemplu, postFuzzing:
+        size_t   fuzzedSize = 0;
+        uint8_t* fuzzedBuf =
+            fuzzer.postFuzzing(reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(len), fuzzedSize);
+        // => acum fuzzedBuf conține ( `[original][mutat de Radamsa]` ),
+        //    iar fuzzedSize este lungimea totală a acestui buffer.
+
+        // 3) Pregătim sockaddr_in pentru destinație și trimitem fuzzedBuf
+        struct sockaddr_in dst_addr {};
+        dst_addr.sin_family = AF_INET;
+        dst_addr.sin_port   = htons(target_port);
+        inet_pton(AF_INET, target_ip.c_str(), &dst_addr.sin_addr);
+
+        ssize_t sent =
+            sendto(send_sock, fuzzedBuf, fuzzedSize, 0, reinterpret_cast<sockaddr*>(&dst_addr), sizeof(dst_addr));
+        if (sent < 0) {
+            perror("[TYPE] [RECV THREAD] sendto failed");
+        } else {
+            std::cout << "[TYPE] [RECV THREAD] Sent " << sent << " bytes (fuzzed) to " << target_ip << ":"
+                      << target_port << std::endl;
+        }
+
+        // 4) Dezalocăm bufferul fuzz-uit
+        free(fuzzedBuf);
+        // ==============================================
+
+    } // end while
+
+    std::cout << "[TYPE] [RECV THREAD] Closing recv socket FD: " << recv_sock << std::endl;
+    close(recv_sock);
+    return nullptr;
+}
+
+void* UDPHandler::sendThreadEntry(void* arg) {
+    // Extract parameters: the socket on which we listen and the associated UDPConnection object
+    auto [send_sock, conn, isFromA] = *static_cast<std::tuple<int, UDPConnection*, bool>*>(arg);
+    delete static_cast<std::tuple<int, UDPConnection*, bool>*>(arg);
+
+    // 1) Retrieve the fuzzer instance from the singleton
+    UDPHandler* handler = UDPHandler::getInstance();
+    FuzzerCore& fuzzer  = handler->fuzzer;
+
+    char               buffer[4096] = {0};
+    struct sockaddr_in src_addr {};
+    socklen_t          addrlen = sizeof(src_addr);
+
+    std::cout << "[SEND-THREAD] Listening on FD " << send_sock << (isFromA ? " (from A side)" : " (from B side)")
+              << std::endl;
+
+    while (true) {
+        // Receive data transparently on send_sock
+        ssize_t len = recvfrom(send_sock, buffer, sizeof(buffer), 0, reinterpret_cast<sockaddr*>(&src_addr), &addrlen);
+        if (len <= 0) {
+            perror("[SEND-THREAD] recvfrom failed");
+            break;
+        }
+
+        // Extract source IP and port
+        char src_ip[INET_ADDRSTRLEN] = {0};
+        inet_ntop(AF_INET, &src_addr.sin_addr, src_ip, sizeof(src_ip));
+        int src_port = ntohs(src_addr.sin_port);
+
+        printf("[SEND-INFO] Received %zd bytes on send-sock FD %d from %s:%u\n", len, send_sock, src_ip, src_port);
+
+        int         forward_sock = -1;
+        std::string dst_ip;
+        int         dst_port = -1;
+
+        if (isFromA) {
+            // Direction A -> B
+            forward_sock = conn->getRecvSockFromEntityB();
+            dst_ip       = conn->getEntityBIP();
+
+            if (conn->getEntityBPort() == -1) {
+                // Use a dynamic port for B from the list
+                if (!conn->popDynamicPort(dst_port)) {
+                    // If no more ports in the list, fall back to the source port
+                    dst_port = src_port;
+                    std::cout << "[SEND-WARN] (A->B) Dynamic port list empty, using source port: " << src_port
+                              << std::endl;
+                } else {
+                    std::cout << "[SEND-INFO] (A->B) Popped dynamic port for B: " << dst_port << std::endl;
+                }
+            } else {
+                // B has a static port
+                dst_port = conn->getEntityBPort();
+            }
+        } else {
+            // Direction B -> A
+            forward_sock = conn->getRecvSockFromEntityA();
+            dst_ip       = conn->getEntityAIP();
+
+            if (conn->getEntityAPort() == -1) {
+                // Use a dynamic port for A from the list
+                if (!conn->popDynamicPort(dst_port)) {
+                    dst_port = src_port;
+                    std::cout << "[SEND-WARN] (B->A) Dynamic port list empty, using source port: " << src_port
+                              << std::endl;
+                } else {
+                    std::cout << "[SEND-INFO] (B->A) Popped dynamic port for A: " << dst_port << std::endl;
+                }
+            } else {
+                // A has a static port
+                dst_port = conn->getEntityAPort();
+            }
+        }
+
+        // === Insert fuzzer call (postFuzzing) here ===
+        // Copy received data into a buffer and apply post-fuzzing
+        size_t   fuzzedSize = 0;
+        uint8_t* fuzzedBuf =
+            fuzzer.postFuzzing(reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(len), fuzzedSize);
+        // =============================================
+
+        struct sockaddr_in dst_addr {};
+        dst_addr.sin_family = AF_INET;
+        dst_addr.sin_port   = htons(dst_port);
+        inet_pton(AF_INET, dst_ip.c_str(), &dst_addr.sin_addr);
+
+        // Send the fuzzed data onward
+        ssize_t sent =
+            sendto(forward_sock, fuzzedBuf, fuzzedSize, 0, reinterpret_cast<sockaddr*>(&dst_addr), sizeof(dst_addr));
+        if (sent < 0) {
+            perror("[SEND-THREAD] sendto failed");
+        } else {
+            std::cout << "[SEND-DEBUG] Forwarded " << sent << " bytes (fuzzed) to " << dst_ip << ":" << dst_port
+                      << " via FD " << forward_sock << std::endl;
+        }
+
+        // Free the fuzzed buffer
+        free(fuzzedBuf);
+    }
+
+    std::cout << "[SEND-INFO] Closing send-sock FD: " << send_sock << std::endl;
+    close(send_sock);
+    return nullptr;
+}
+
+void UDPHandler::startSendThreads() {
+    std::cout << "[DEBUG] Launching sender threads for each send socket..." << std::endl;
+
+    for (size_t idx = 0; idx < send_sockets_.size(); ++idx) {
+        int sock = send_sockets_[idx];
+        if (sock_to_connection_.count(sock) == 0) {
+            std::cerr << "[ERROR] No mapping found for send-socket FD " << sock << std::endl;
+            continue;
+        }
+
+        UDPConnection* conn = sock_to_connection_[sock];
+        if (conn->getEntityAPort() != -1 && conn->getEntityBPort() != -1) {
+            continue;
+        }
+
+        pthread_t   tid;
+        bool        isFromA;
+        sockaddr_in sock_addr{};
+        socklen_t   len = sizeof(sock_addr);
+        if (getsockname(sock, (sockaddr*) &sock_addr, &len) < 0) {
+            perror("[ERROR] getsockname");
+            isFromA = false; // fallback, dar ideal ar fi să nu ajungem aici
+        } else {
+            int bound_port = ntohs(sock_addr.sin_port);
+            if (bound_port == conn->getEntityASendPort()) {
+                // Portul pe care proxy-ul ascultă ca să trimită spre A,
+                // a primit un pachet ⇒ pachet de la A spre B
+                isFromA = true;
+            } else {
+                isFromA = false;
+            }
+        }
+
+        // Pregătim argumentele pentru thread
+        auto* args = new std::tuple<int, UDPConnection*, bool>(sock, conn, isFromA);
+        if (pthread_create(&tid, nullptr, &UDPHandler::sendThreadEntry, args) != 0) {
+            perror("[ERROR] pthread_create (sendThreadEntry) failed");
+            delete args;
+        } else {
+            pthread_detach(tid);
+            std::cout << "[DEBUG] Send-thread launched for socket FD: " << sock << (isFromA ? " (A→B)" : " (B→A)")
+                      << std::endl;
+        }
+    }
+
+    std::cout << "[INFO] All UDP send threads launched." << std::endl;
 }

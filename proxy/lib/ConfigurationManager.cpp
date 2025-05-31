@@ -63,12 +63,14 @@ bool ConfigurationManager::parse() {
                 if (data["connections"]) {
                     for (const auto& cnode : data["connections"]) {
                         Connection c;
-                        c.src_ip         = cnode["src_ip"].as<std::string>();
-                        c.src_port       = cnode["src_port"].as<int>();
-                        c.port_src_proxy = cnode["port_src_proxy"].as<int>();
-                        c.dst_ip         = cnode["dst_ip"].as<std::string>();
-                        c.dst_port       = cnode["dst_port"].as<int>();
-                        c.port_dst_proxy = cnode["port_dst_proxy"].as<int>();
+                        c.entityA_ip              = cnode["entityA_ip"].as<std::string>();
+                        c.entityA_port            = cnode["entityA_port"].as<int>();
+                        c.entityA_proxy_port_recv = cnode["entityA_proxy_port_recv"].as<int>();
+                        c.entityA_proxy_port_send = cnode["entityA_proxy_port_send"].as<int>();
+                        c.entityB_ip              = cnode["entityB_ip"].as<std::string>();
+                        c.entityB_port            = cnode["entityB_port"].as<int>();
+                        c.entityB_proxy_port_recv = cnode["entityB_proxy_port_recv"].as<int>();
+                        c.entityB_proxy_port_send = cnode["entityB_proxy_port_send"].as<int>();
                         entity.connections.push_back(c);
                     }
                 }

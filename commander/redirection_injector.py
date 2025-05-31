@@ -45,19 +45,24 @@ def inject_fuzzer_redirections(config_path):
                 continue
             seen_pairs.add(key)
 
-            port_src_proxy = random_port()
-            port_dst_proxy = random_port()
+            connection = {
+                "entityA_ip": src_ip,
+                "entityA_port": src_port,
+                "entityA_proxy_port_recv": random_port(),
+                "entityA_proxy_port_send": random_port(),
+                "entityB_ip": dst_ip,
+                "entityB_port": dst_port,
+                "entityB_proxy_port_recv": random_port(),
+                "entityB_proxy_port_send": random_port()
+            }
 
-            connections.append({
-                "src_ip": src_ip,
-                "src_port": src_port,
-                "port_src_proxy": port_src_proxy,
-                "dst_ip": dst_ip,
-                "dst_port": dst_port,
-                "port_dst_proxy": port_dst_proxy
-            })
+            connections.append(connection)
 
-            log_info(f"{src_ip}:{src_port} -> {dst_ip}:{dst_port} | proxy_ports: {port_src_proxy}/{port_dst_proxy}")
+            log_info(
+                f"{src_ip}:{src_port} <-> {dst_ip}:{dst_port} | "
+                f"A[recv/send]: {connection['entityA_proxy_port_recv']}/{connection['entityA_proxy_port_send']} "
+                f"B[recv/send]: {connection['entityB_proxy_port_recv']}/{connection['entityB_proxy_port_send']}"
+            )
 
     fuzzer["connections"] = connections
 
@@ -65,4 +70,3 @@ def inject_fuzzer_redirections(config_path):
         yaml.safe_dump(config, f, sort_keys=False, default_flow_style=False)
 
     log_success(f"Injected {len(connections)} bidirectional connections into config.")
-

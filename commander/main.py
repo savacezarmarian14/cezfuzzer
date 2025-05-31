@@ -28,8 +28,6 @@ def main():
 
     # 5. Generează Dockerfile-uri + entrypoint-uri
     generate_all_dockerfiles(cfg.get("entities", {}), args.template)
-
-
     # 6. Build + run containere
     launch_all_entities(config=cfg, standby=args.standby)
 

@@ -21,85 +21,91 @@ def generate_tproxy_block_from_connections(connections, fuzzer_ip):
     ]
 
     for conn in connections:
-        # Reguli pentru trafic A -> B
-        if conn["dst_port"] != -1:
+        # 1. Trafic inițial de la EntityA
+        lines.append(
+            f"iptables -t mangle -A PREROUTING -p udp -s {conn['entityA_ip']} --dport {conn['entityA_port']} "
+            f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['entityA_proxy_port_recv']} --tproxy-mark 0x1/0x1"
+        )
+
+        # 2. Trafic inițial de la EntityB
+        if conn["entityB_port"] != -1:
             lines.append(
-                f"iptables -t mangle -A PREROUTING -p udp -s {conn['src_ip']} --dport {conn['dst_port']} "
-                f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_src_proxy']} --tproxy-mark 0x1/0x1"
+                f"iptables -t mangle -A PREROUTING -p udp -s {conn['entityB_ip']} --dport {conn['entityB_port']} "
+                f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['entityB_proxy_port_recv']} --tproxy-mark 0x1/0x1"
             )
         else:
             lines.append(
-                f"iptables -t mangle -A PREROUTING -p udp -s {conn['src_ip']} "
-                f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_src_proxy']} --tproxy-mark 0x1/0x1"
+                f"iptables -t mangle -A PREROUTING -p udp -s {conn['entityB_ip']} "
+                f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['entityB_proxy_port_recv']} --tproxy-mark 0x1/0x1"
             )
 
-        # Reguli pentru trafic B -> A
-        if conn["src_port"] != -1:
-            lines.append(
-                f"iptables -t mangle -A PREROUTING -p udp -s {conn['dst_ip']} --dport {conn['src_port']} "
-                f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_dst_proxy']} --tproxy-mark 0x1/0x1"
-            )
-        else:
-            lines.append(
-                f"iptables -t mangle -A PREROUTING -p udp -s {conn['dst_ip']} "
-                f"-j TPROXY --on-ip {fuzzer_ip} --on-port {conn['port_dst_proxy']} --tproxy-mark 0x1/0x1"
-            )
-
-        # Reguli SNAT
-        if conn["src_port"] != -1:
-            lines.append(
-                f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_src_proxy']} "
-                f"-j SNAT --to-source {conn['src_ip']}:{conn['src_port']}"
-            )
-        else:
-            lines.append(
-                f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_src_proxy']} "
-                f"-j SNAT --to-source {conn['src_ip']}"
-            )
-            
-        if conn["dst_port"] != -1:
-            lines.append(
-                f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_dst_proxy']} "
-                f"-j SNAT --to-source {conn['dst_ip']}:{conn['dst_port']}"
-            )
-        else:
-            lines.append(
-                f"iptables -t nat -A POSTROUTING -p udp --sport {conn['port_dst_proxy']} "
-                f"-j SNAT --to-source {conn['dst_ip']}"
-            )
+       
+        # 4. SNAT
+        lines.append(
+            f"iptables -t nat -D POSTROUTING -p udp --sport {conn['entityA_proxy_port_send']} "
+            f"-j SNAT --to-source {conn['entityB_ip']}:{conn['entityB_port'] if conn['entityB_port'] != -1 else ''}"
+        )
+        lines.append(
+            f"iptables -t nat -D POSTROUTING -p udp --sport {conn['entityB_proxy_port_send']} "
+            f"-j SNAT --to-source {conn['entityA_ip']}:{conn['entityA_port']}"
+        )
 
     lines.append("ip rule add fwmark 1 lookup local || true")
     lines.append("# === END TPROXY ===")
     return "\n".join(lines)
 
 def generate_client_dnat_rules(ip, port, connections, fuzzer):
+    # Introducem regula PREROUTING prima, fără dport, apoi restul regulilor
     lines = []
     for conn in connections:
-        # Caz 1: Entitatea curentă este sursa în conexiune
-        if conn["src_ip"] == ip:
-            # Verificăm dacă portul entității corespunde sau este dinamic
-            if port == -1 or conn["src_port"] == port or conn["src_port"] == -1:
-                # Regulă pentru trafic către destinație
-                dport_condition = f"--dport {conn['dst_port']}" if conn["dst_port"] != -1 else ""
-                lines.append(f"""
-# === CLIENT → PROXY DNAT for {conn['dst_ip']}:{'ANY' if conn['dst_port'] == -1 else conn['dst_port']} ===
-iptables -t nat -A OUTPUT -p udp -d {conn['dst_ip']} {dport_condition} -j DNAT --to-destination {fuzzer['ip']}:{conn['port_src_proxy']}
-iptables -A INPUT -p udp -s {fuzzer['ip']} --sport {conn['port_src_proxy']} -j ACCEPT
-# === END ===
-""")
-
-        # Caz 2: Entitatea curentă este destinația în conexiune
-        if conn["dst_ip"] == ip:
-            # Verificăm dacă portul entității corespunde sau este dinamic
-            if port == -1 or conn["dst_port"] == port or conn["dst_port"] == -1:
-                # Regulă pentru trafic către sursă
-                dport_condition = f"--dport {conn['src_port']}" if conn["src_port"] != -1 else ""
-                lines.append(f"""
-# === CLIENT → PROXY DNAT for {conn['src_ip']}:{'ANY' if conn['src_port'] == -1 else conn['src_port']} ===
-iptables -t nat -A OUTPUT -p udp -d {conn['src_ip']} {dport_condition} -j DNAT --to-destination {fuzzer['ip']}:{conn['port_dst_proxy']}
-iptables -A INPUT -p udp -s {fuzzer['ip']} --sport {conn['port_dst_proxy']} -j ACCEPT
-# === END ===
-""")
+        # Caz EntityA
+        if conn["entityA_ip"] == ip and (port == -1 or conn["entityA_port"] == port):
+            recv_port = conn['entityA_proxy_port_recv']
+            # 1. Regula generală PREROUTING fără port
+            lines.append(f"# === PREROUTING pentru proxy EntityA ===")
+            lines.append(
+                f"iptables -t nat -I PREROUTING 1 -p udp -d {fuzzer['ip']} -j DNAT --to-destination {fuzzer['ip']}:{recv_port}"
+            )
+            # 2. DNAT pentru ClientA către EntityB
+            dport_cond = f"--dport {conn['entityB_port']}" if conn['entityB_port'] != -1 else ""
+            lines.append(f"# === DNAT pentru ClientA către {conn['entityB_ip']} ===")
+            lines.append(
+                f"iptables -t nat -A OUTPUT -p udp -d {conn['entityB_ip']} {dport_cond} -j DNAT --to-destination {fuzzer['ip']}:{recv_port}"
+            )
+            # 3. Accept răspunsuri de la proxy
+            lines.append(
+                f"iptables -A INPUT -p udp -s {fuzzer['ip']} --sport {conn['entityA_proxy_port_send']} -j ACCEPT"
+            )
+            # 4. Redirect Local: SEND ➜ RECV pentru ClientA
+            lines.append(f"# === REDIRECT SEND ➜ RECV pentru ClientA ===")
+            lines.append(
+                f"iptables -t nat -A OUTPUT -p udp -d {fuzzer['ip']} --dport {conn['entityA_proxy_port_send']} -j DNAT --to-destination {fuzzer['ip']}:{recv_port}"
+            )
+            break
+        # Caz EntityB
+        if conn["entityB_ip"] == ip and (port == -1 or conn["entityB_port"] == port or conn["entityB_port"] == -1):
+            recv_port = conn['entityB_proxy_port_recv']
+            # 1. Regula generală PREROUTING fără port
+            lines.append(f"# === PREROUTING pentru proxy EntityB ===")
+            lines.append(
+                f"iptables -t nat -I PREROUTING 1 -p udp -d {fuzzer['ip']} -j DNAT --to-destination {fuzzer['ip']}:{recv_port}"
+            )
+            # 2. DNAT pentru ClientB către EntityA
+            dport_cond = f"--dport {conn['entityA_port']}"
+            lines.append(f"# === DNAT pentru ClientB către {conn['entityA_ip']} ===")
+            lines.append(
+                f"iptables -t nat -A OUTPUT -p udp -d {conn['entityA_ip']} {dport_cond} -j DNAT --to-destination {fuzzer['ip']}:{recv_port}"
+            )
+            # 3. Accept răspunsuri de la proxy
+            lines.append(
+                f"iptables -A INPUT -p udp -s {fuzzer['ip']} --sport {conn['entityB_proxy_port_send']} -j ACCEPT"
+            )
+            # 4. Redirect Local: SEND ➜ RECV pentru ClientB
+            lines.append(f"# === REDIRECT SEND ➜ RECV pentru ClientB ===")
+            lines.append(
+                f"iptables -t nat -A OUTPUT -p udp -d {fuzzer['ip']} --dport {conn['entityB_proxy_port_send']} -j DNAT --to-destination {fuzzer['ip']}:{recv_port}"
+            )
+            break
     return "\n".join(lines)
 
 def generate_all_dockerfiles(entities: dict, template_path="Dockerfile.template"):
@@ -116,21 +122,26 @@ def generate_dockerfile(entity_name, entity_cfg, all_entities, template_path="Do
 
         role = entity_cfg.get("role")
         ip = entity_cfg.get("ip")
-        port = entity_cfg.get("port", -1)  # Default la -1 dacă nu există
+        port = entity_cfg.get("port", -1)
         proto = entity_cfg.get("protocol", "udp").lower()
         is_fuzzed = entity_cfg.get("fuzzed", False)
 
+        # Pentru fuzzer: generăm automat blocul TPROXY
         if role == "fuzzer" and "connections" in entity_cfg:
             tproxy_block = generate_tproxy_block_from_connections(entity_cfg["connections"], ip)
             ef.write(tproxy_block + "\n")
 
-        if is_fuzzed and role != "fuzzer" and proto == "udp":
-            fuzzer = next((e for e in all_entities.values() if e.get("role") == "fuzzer"), None)
+        # Pentru client: inserăm regulile DNAT modificate
+        if role != "fuzzer" and is_fuzzed and proto == "udp":
+            fuzzer = next((cfg for cfg in all_entities.values() if cfg.get("role") == "fuzzer"), None)
             if fuzzer and "connections" in fuzzer:
                 dnat_block = generate_client_dnat_rules(ip, port, fuzzer["connections"], fuzzer)
                 ef.write(dnat_block + "\n")
+            else:
+                ef.write("# Fuzzer connections nu sunt configurate; nu se generează DNAT.\n")
 
-        elif is_fuzzed and proto == "tcp":
+        # Pentru TCP (indiferent de rol), redirecționare neimplementată
+        if is_fuzzed and proto == "tcp":
             ef.write("# TCP redirection not implemented\n")
 
         ef.write('exec "$@"\n')
