@@ -5,9 +5,11 @@
 #include <cstddef>
 #include <cstdint>
 
-#define MAX_RADAMSA_ARGS 10
-#define MAX_BUFFER_SIZE (4 * 1024)
-#define MIN_OUTPUT_SIZE 4096
+#define FUZZ_LENGTH_MULTIPLIER 15
+#define MAX_RADAMSA_ARGS       20
+#define MIN_OUTPUT_SIZE        (100 * BATCH)
+#define BATCH                  4096
+#define MAX_BUFFER_SIZE        (10000 * BATCH)
 
 enum FuzzStyle { FUZZSTYLE_RANDOMIZATION, FUZZSTYLE_TRUNCATE, FUZZSTYLE_INSERT, FUZZSTYLE_OVERFLOW, FUZZSTYLE_CUSTOM };
 
@@ -21,6 +23,7 @@ class FuzzerCore {
     uint8_t* guidedFuzzing(const uint8_t* input, size_t size, size_t& newSize);
     uint8_t* pass(const uint8_t* input, size_t size, size_t& newSize);
     uint8_t* normalizeOutputSize(uint8_t* input, size_t input_len, size_t& output_len);
+    uint8_t* runRadamsaExpanded(const uint8_t* data, size_t size, size_t& outSize);
 
   private:
     FuzzStyle   style;

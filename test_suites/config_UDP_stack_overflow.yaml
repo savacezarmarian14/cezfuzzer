@@ -6,14 +6,14 @@ network:
   subnet: 192.168.1.0/24
   gateway: 192.168.1.1
 entities:
-  udp_primary:
+  udp_server:
     role: receiver
     protocol: udp
-    ip: 192.168.1.11
-    port: 5000
+    ip: 192.168.1.10
+    port: 9999
     fuzzed: true
     exec_with: ''
-    binary_path: ./build/tests/vuln-udp-dynamic-port-entity/server_primary
+    binary_path: ./build/tests/vuln-udp-stack-overflow/server-stack-overflow
     args: []
     destinations:
     - ip: 192.168.1.10
@@ -21,16 +21,17 @@ entities:
   udp_client:
     role: sender
     protocol: udp
-    ip: 192.168.1.10
+    ip: 192.168.1.20
     port: -1
     fuzzed: true
     exec_with: ''
-    binary_path: ./build/tests/vuln-udp-dynamic-port-entity/client_dynamic
+    binary_path: ./build/tests/vuln-udp-stack-overflow/client-stack-overflow
     args:
     - 192.168.1.11
+    - 9999
     destinations:
-    - ip: 192.168.1.11
-      port: 5000
+    - ip: 192.168.1.10
+      port: 9999
   fuzzer_1:
     role: fuzzer
     ip: 192.168.1.40
@@ -40,12 +41,4 @@ entities:
     binary_path: ./build/proxy/proxy_fuzzer
     args:
     - config.yaml
-    connections:
-    - entityA_ip: 192.168.1.11
-      entityA_port: 5000
-      entityA_proxy_port_recv: 26011
-      entityA_proxy_port_send: 53067
-      entityB_ip: 192.168.1.10
-      entityB_port: -1
-      entityB_proxy_port_recv: 23468
-      entityB_proxy_port_send: 48761
+

@@ -8,8 +8,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_subdirectory(proxy)
 add_subdirectory(luncher)
 
+# Add the tests suite 
+add_subdirectory(tests)
+
 # Optionally add commander/ if it becomes a C++ component
 
 # add_subdirectory(commander)
+
 
 

@@ -18,10 +18,25 @@ entities:
     destinations:
     - ip: 192.168.1.10
       port: -1
+    - ip: 192.168.1.12
+      port: -1
   udp_client:
     role: sender
     protocol: udp
     ip: 192.168.1.10
+    port: -1
+    fuzzed: true
+    exec_with: ''
+    binary_path: ./build/tests/vuln-udp-dynamic-port-entity/client_dynamic
+    args:
+    - 192.168.1.11
+    destinations:
+    - ip: 192.168.1.11
+      port: 5000
+  udp_client2:
+    role: sender
+    protocol: udp
+    ip: 192.168.1.12
     port: -1
     fuzzed: true
     exec_with: ''
@@ -40,12 +55,4 @@ entities:
     binary_path: ./build/proxy/proxy_fuzzer
     args:
     - config.yaml
-    connections:
-    - entityA_ip: 192.168.1.11
-      entityA_port: 5000
-      entityA_proxy_port_recv: 26011
-      entityA_proxy_port_send: 53067
-      entityB_ip: 192.168.1.10
-      entityB_port: -1
-      entityB_proxy_port_recv: 23468
-      entityB_proxy_port_send: 48761
+

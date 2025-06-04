@@ -1,20 +1,43 @@
+# .clang-format
 BasedOnStyle: LLVM
-Language: Cpp
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
-BreakBeforeBraces: Attach
-AllowShortIfStatementsOnASingleLine: false
-AllowShortLoopsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: Inline
 ColumnLimit: 120
 NamespaceIndentation: None
 IndentCaseLabels: true
 SpacesBeforeTrailingComments: 1
 SpaceAfterCStyleCast: true
+
+# Pointer alignment
 PointerAlignment: Left
 DerivePointerAlignment: false
+
+# Consecutive alignment
 AlignConsecutiveDeclarations: true
-AlignConsecutiveAssignments: true   # <--- adăugat
+AlignConsecutiveAssignments: true
+AlignConsecutiveMacros: true    # Align #define constants
+
+# Operand alignment
 AlignOperands: true
+
+# Include sorting (disabled)
 SortIncludes: false
+
+# Short constructs
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Inline
+
+# Brace wrapping: put function opening braces on their own line
+BreakBeforeBraces: Custom
+BraceWrapping:
+    AfterFunction:  true   # 
+    AfterStruct:    false
+    AfterClass:     false
+    AfterNamespace: false
+    AfterControlStatement: false
+    AfterEnum:      false
+    BeforeCatch:    false
+    BeforeElse:     false
+    IndentBraces:   false

@@ -12,16 +12,19 @@
 UDPHandler* UDPHandler::instance_ = nullptr;
 
 UDPHandler::UDPHandler(const std::vector<utils::EntityConfig>& entities, char* ip)
-    : entities_(entities), proxyIP_(ip), fuzzer(FUZZSTYLE_RANDOMIZATION) {
+    : entities_(entities), proxyIP_(ip), fuzzer(FUZZSTYLE_RANDOMIZATION)
+{
     instance_ = this;
     std::cout << "[DEBUG] UDPHandler initialized with proxy IP: " << proxyIP_ << std::endl;
 }
 
-UDPHandler* UDPHandler::getInstance() {
+UDPHandler* UDPHandler::getInstance()
+{
     return instance_;
 }
 
-int UDPHandler::createAndBindSocket(int port, bool useTransparent) {
+int UDPHandler::createAndBindSocket(int port, bool useTransparent)
+{
     std::cout << "[DEBUG] Creating UDP socket on port " << port << " with "
               << (useTransparent ? "IP_TRANSPARENT" : "IP_RECVORIGDSTADDR") << std::endl;
 
@@ -54,7 +57,8 @@ int UDPHandler::createAndBindSocket(int port, bool useTransparent) {
     return sock;
 }
 
-void UDPHandler::buildFromConnections(std::vector<utils::Connection>& conns) {
+void UDPHandler::buildFromConnections(std::vector<utils::Connection>& conns)
+{
     std::cout << "[DEBUG] Starting to build connections..." << std::endl;
 
     for (const auto& conn_struct : conns) {
@@ -91,7 +95,8 @@ void UDPHandler::buildFromConnections(std::vector<utils::Connection>& conns) {
     }
 }
 
-void UDPHandler::startRecvThreads() {
+void UDPHandler::startRecvThreads()
+{
     std::cout << "[DEBUG] Launching receiver threads for each recv socket..." << std::endl;
 
     for (int sock : recv_sockets_) {
@@ -115,7 +120,8 @@ void UDPHandler::startRecvThreads() {
     std::cout << "[INFO] All UDP recv threads launched." << std::endl;
 }
 
-void* UDPHandler::recvThreadEntry(void* arg) {
+void* UDPHandler::recvThreadEntry(void* arg)
+{
     auto [recv_sock, conn] = *static_cast<std::pair<int, UDPConnection*>*>(arg);
     delete static_cast<std::pair<int, UDPConnection*>*>(arg);
 
@@ -192,15 +198,17 @@ void* UDPHandler::recvThreadEntry(void* arg) {
         dst_addr.sin_port   = htons(target_port);
         inet_pton(AF_INET, target_ip.c_str(), &dst_addr.sin_addr);
 
-        ssize_t sent =
-            sendto(send_sock, fuzzedBuf, fuzzedSize, 0, reinterpret_cast<sockaddr*>(&dst_addr), sizeof(dst_addr));
+        uint8_t _UDPPayload[MAX_UDP_PAYLOAD_SIZE] = {0};
+        size_t  _UDPPayloadSize = fuzzedSize > (MAX_UDP_PAYLOAD_SIZE - 1) ? (MAX_UDP_PAYLOAD_SIZE - 1) : fuzzedSize;
+        memcpy(_UDPPayload, fuzzedBuf, _UDPPayloadSize);
+        ssize_t sent = sendto(send_sock, _UDPPayload, _UDPPayloadSize, 0, reinterpret_cast<sockaddr*>(&dst_addr),
+                              sizeof(dst_addr));
         if (sent < 0) {
             perror("[TYPE] [RECV THREAD] sendto failed");
         } else {
             std::cout << "[TYPE] [RECV THREAD] Sent " << sent << " bytes (fuzzed) to " << target_ip << ":"
                       << target_port << std::endl;
         }
-
         // 4) Dezalocăm bufferul fuzz-uit
         free(fuzzedBuf);
         // ==============================================
@@ -212,7 +220,8 @@ void* UDPHandler::recvThreadEntry(void* arg) {
     return nullptr;
 }
 
-void* UDPHandler::sendThreadEntry(void* arg) {
+void* UDPHandler::sendThreadEntry(void* arg)
+{
     // Extract parameters: the socket on which we listen and the associated UDPConnection object
     auto [send_sock, conn, isFromA] = *static_cast<std::tuple<int, UDPConnection*, bool>*>(arg);
     delete static_cast<std::tuple<int, UDPConnection*, bool>*>(arg);
@@ -298,9 +307,12 @@ void* UDPHandler::sendThreadEntry(void* arg) {
         dst_addr.sin_port   = htons(dst_port);
         inet_pton(AF_INET, dst_ip.c_str(), &dst_addr.sin_addr);
 
+        uint8_t _UDPPayload[MAX_UDP_PAYLOAD_SIZE] = {0};
+        size_t  _UDPPayloadSize = fuzzedSize > (MAX_UDP_PAYLOAD_SIZE - 1) ? (MAX_UDP_PAYLOAD_SIZE - 1) : fuzzedSize;
+        memcpy(_UDPPayload, fuzzedBuf, _UDPPayloadSize);
         // Send the fuzzed data onward
-        ssize_t sent =
-            sendto(forward_sock, fuzzedBuf, fuzzedSize, 0, reinterpret_cast<sockaddr*>(&dst_addr), sizeof(dst_addr));
+        ssize_t sent = sendto(forward_sock, _UDPPayload, _UDPPayloadSize, 0, reinterpret_cast<sockaddr*>(&dst_addr),
+                              sizeof(dst_addr));
         if (sent < 0) {
             perror("[SEND-THREAD] sendto failed");
         } else {
@@ -317,7 +329,8 @@ void* UDPHandler::sendThreadEntry(void* arg) {
     return nullptr;
 }
 
-void UDPHandler::startSendThreads() {
+void UDPHandler::startSendThreads()
+{
     std::cout << "[DEBUG] Launching sender threads for each send socket..." << std::endl;
 
     for (size_t idx = 0; idx < send_sockets_.size(); ++idx) {

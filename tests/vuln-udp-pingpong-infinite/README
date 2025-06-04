@@ -1,0 +1,11 @@
+gcc -Wall -O2 pingpong.c -o pingpong
+./pingpong A
+./pingpong B
+
+
+Pentru a opri, trimite “STOP” de la oricare proces:
+
+# Dintr-un nou terminal
+echo -n "STOP" | nc -u -w1 127.0.0.1 6000
+# sau
+echo -n "STOP" | nc -u -w1 127.0.0.1 6001

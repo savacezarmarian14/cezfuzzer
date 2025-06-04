@@ -1,0 +1,19 @@
+Goal:
+
+A “primary” server listens on a fixed port (5000).
+
+When it receives HELLO:<client_id>, it chooses a random free UDP port, forks a child “dynamic server” on that port, and replies PORT:<dynamic_port>.
+
+The client then continues sending DATA:<length>:<payload> or BYE to the new port.
+
+Parsing is done with simple sscanf and fixed‐size buffers, so oversized or malformatted payloads may overflow or crash.
+
+
+
+gcc -o server_primary server_primary.c
+gcc -o client_dynamic client_dynamic.c
+
+./server_primary
+
+
+./client_dynamic 127.0.0.1 TestClient

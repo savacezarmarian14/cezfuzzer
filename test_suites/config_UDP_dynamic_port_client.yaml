@@ -40,12 +40,4 @@ entities:
     binary_path: ./build/proxy/proxy_fuzzer
     args:
     - config.yaml
-    connections:
-    - entityA_ip: 192.168.1.11
-      entityA_port: 5000
-      entityA_proxy_port_recv: 26011
-      entityA_proxy_port_send: 53067
-      entityB_ip: 192.168.1.10
-      entityB_port: -1
-      entityB_proxy_port_recv: 23468
-      entityB_proxy_port_send: 48761
+

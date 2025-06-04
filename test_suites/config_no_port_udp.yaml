@@ -1,68 +1,59 @@
 general:
-  log_level: INFO
-  log_dir: logs/
+  log_level: "INFO"                      
+  log_dir: logs/                         
+
 network:
-  docker_network_name: mitm_net
-  subnet: 192.168.1.0/24
-  gateway: 192.168.1.1
+  docker_network_name: mitm_net         
+  subnet: 192.168.1.0/24                
+  gateway: 192.168.1.1                  
+
 entities:
   udp_entity1:
-    role: hybrid
+    role: hybrid                        
     protocol: udp
-    ip: 192.168.1.10
-    port: 9999
-    fuzzed: true
-    exec_with: python3
+    ip: 192.168.1.10                    
+    port: 9999                          
+    fuzzed: true                       
+    exec_with: python3                  
     binary_path: ./tests/UDP_Dificulty_1/test_echo/server.py
-    args: []
-    destinations:
-    - ip: 192.168.1.20
-      port: -1
-    - ip: 192.168.1.30
-      port: -1
+    args: []                          
+    destinations:                       
+      - ip: 192.168.1.20
+        port: -1
+      - ip: 192.168.1.30
+        port: -1
+
   udp_entity2:
-    role: hybrid
+    role: hybrid                        
     protocol: udp
-    ip: 192.168.1.20
-    port: -1
-    fuzzed: true
-    exec_with: python3
-    binary_path: ./tests/UDP_Dificulty_1/test_echo/server.py
-    args: []
-    destinations:
-    - ip: 192.168.1.10
-      port: 9999
+    ip: 192.168.1.20                    
+    port: -1                          
+    fuzzed: true                       
+    exec_with: python3                  
+    binary_path: ./tests/UDP_Dificulty_1/test_echo/client.py
+    args: []                          
+    destinations:                       
+      - ip: 192.168.1.10
+        port: 9999
+
   udp_entity3:
-    role: hybrid
+    role: hybrid                        
     protocol: udp
-    ip: 192.168.1.30
-    port: -1
-    fuzzed: true
-    exec_with: python3
-    binary_path: ./tests/UDP_Dificulty_1/test_echo/server.py
-    args: []
-    destinations:
-    - ip: 192.168.1.10
-      port: 9999
+    ip: 192.168.1.30                    
+    port: -1                          
+    fuzzed: true                       
+    exec_with: python3                  
+    binary_path: ./tests/UDP_Dificulty_1/test_echo/client.py
+    args: []                          
+    destinations:                       
+      - ip: 192.168.1.10
+        port: 9999
+
   fuzzer_1:
     role: fuzzer
     ip: 192.168.1.40
     port: 5050
     fuzzed: true
-    exec_with: ''
+    exec_with: ""                      
     binary_path: ./build/proxy/proxy_fuzzer
-    args:
-    - config.yaml
-    connections:
-    - src_ip: 192.168.1.10
-      src_port: 9999
-      port_src_proxy: 36927
-      dst_ip: 192.168.1.20
-      dst_port: -1
-      port_dst_proxy: 33347
-    - src_ip: 192.168.1.10
-      src_port: 9999
-      port_src_proxy: 43675
-      dst_ip: 192.168.1.30
-      dst_port: -1
-      port_dst_proxy: 21972
+    args: [config.yaml]

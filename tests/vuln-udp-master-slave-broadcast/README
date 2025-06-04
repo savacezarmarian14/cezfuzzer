@@ -1,0 +1,14 @@
+Un master ascultă pe 7000. Slave-ii (spre ex. 3 instanțe) ascultă pe 7101, 7102, 7103. 
+Când un Slave trimite MSG:<id>:<text> la Master, Master face BROADCAST:<id>:<text> către toți slavi. Parsing-ul e fragil (nu verifică spații adiționale sau lungime).
+
+gcc -o master_broadcast master_broadcast.c
+gcc -pthread -o slave_broadcast slave_broadcast.c
+
+
+./master
+
+În alte trei terminale (sau taburi), rulăm câte un slave:
+
+./slave_broadcast S1 7101 127.0.0.1
+./slave_broadcast S2 7102 127.0.0.1
+./slave_broadcast S3 7103 127.0.0.1

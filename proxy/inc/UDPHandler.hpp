@@ -11,6 +11,8 @@
 #include "ConfigurationManager.hpp"
 #include "Fuzzer.hpp"
 
+#define MAX_UDP_PAYLOAD_SIZE 65500
+
 class UDPHandler {
   public:
     static UDPHandler* getInstance();
