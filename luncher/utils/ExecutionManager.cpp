@@ -13,7 +13,7 @@ ExecutionManager::ExecutionManager() = default;
 
 ExecutionManager::ExecutionManager(const ConfigurationManager& config) : config_(config) {}
 
-std::optional<pid_t> ExecutionManager::launchEntity(const EntityConfig& entity)
+std::optional<pid_t> ExecutionManager::launchEntity(const EntityConfig& entity, int index)
 {
     pid_t pid = fork();
     if (pid < 0) {
@@ -23,7 +23,7 @@ std::optional<pid_t> ExecutionManager::launchEntity(const EntityConfig& entity)
 
     if (pid == 0) {
         // Child process
-        std::string log_path = "/tmp/logs/" + entity.name + ".log";
+        std::string log_path = "/tmp/logs/" + entity.name + "_" + std::to_string(index) + ".log";
         mkdir("/tmp/logs", 0755); // creează folderul dacă nu există
 
         int fd = open(log_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);

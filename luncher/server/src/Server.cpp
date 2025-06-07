@@ -1,6 +1,7 @@
 #include "Server.hpp"
 
-void* flush_thread_func(void* arg) {
+void* flush_thread_func(void* arg)
+{
     while (1) {
         fflush(stdout);
         fflush(stderr);
@@ -9,7 +10,8 @@ void* flush_thread_func(void* arg) {
     return NULL;
 }
 
-void start_flusher_thread() {
+void start_flusher_thread()
+{
     pthread_t flush_thread;
     int       ret = pthread_create(&flush_thread, NULL, flush_thread_func, NULL);
     if (ret != 0) {
@@ -19,7 +21,8 @@ void start_flusher_thread() {
     }
 }
 
-void send_client_ip(int sockfd) {
+void send_client_ip(int sockfd)
+{
     struct client_info* ci;
 
     for (int i = 0; i < client_list.no_clients; ++i) {
@@ -32,12 +35,14 @@ void send_client_ip(int sockfd) {
     send_message(sockfd, (void*) ci->clientIP, sizeof(ci->clientIP));
 }
 
-void send_start_signal(int sockfd) {
+void send_start_signal(int sockfd)
+{
     int ret;
     ret = send_message(sockfd, START, strlen(START));
 }
 
-void* handle_client_connection(void* arg) {
+void* handle_client_connection(void* arg)
+{
     int  client_fd            = *(int*) arg;
     char buffer[MAX_MSG_SIZE] = {0};
     int  ret;
@@ -50,23 +55,19 @@ void* handle_client_connection(void* arg) {
         ret = recv_message(client_fd, buffer);
         printf("[INFO] Message: %s\n", buffer);
 
-        // if (strncmp(buffer, "[COMMANDER]", strlen("[COMMANDER]")) == 0) {
-        //     for (int i = 0; i < client_list.no_clients; ++i) {
-        //         if (client_list.list[i].sockfd == client_fd) {
-        //             client_list.list[i].isCommander = true;
-        //             printf("[INFO] Commander socket: %d\n", client_fd);
-        //             break;
-        //         }
-        //     }
-        // }
+        if (strncmp(buffer, CRASH, strlen(CRASH)) == 0) {
+            strcpy(buffer, RESTART);
+            send_message(client_fd, buffer, strlen(buffer));
+        }
+
         sleep(1);
-        // printf("[INFO] Recieved message: %s\n", buffer);
     }
 
     return NULL;
 }
 
-void* listen_thread_func(void* arg) {
+void* listen_thread_func(void* arg)
+{
     int                listen_fd = *(int*) arg;
     int                client_fd = 0;
     struct sockaddr_in client_address;
@@ -101,7 +102,8 @@ void* listen_thread_func(void* arg) {
     return NULL;
 }
 
-ssize_t send_message(int sockfd, const void* buffer, size_t len) {
+ssize_t send_message(int sockfd, const void* buffer, size_t len)
+{
     int   ret;
     int   bytes_sent, total_bytes;
     char* buff = (char*) &len;
@@ -134,7 +136,8 @@ ssize_t send_message(int sockfd, const void* buffer, size_t len) {
     return len;
 }
 
-ssize_t recv_message(int sockfd, void* buffer) {
+ssize_t recv_message(int sockfd, void* buffer)
+{
     int    ret;
     int    bytes_received = 0;
     int    total_bytes    = sizeof(size_t);
@@ -174,7 +177,8 @@ ssize_t recv_message(int sockfd, void* buffer) {
     return len;
 }
 
-int init_server() {
+int init_server()
+{
     static int         sockfd;
     struct sockaddr_in server_addr;
     struct sockaddr_in client_addr;
@@ -215,7 +219,8 @@ int init_server() {
     return sockfd;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
     int ret = 0;
 
     start_flusher_thread();
@@ -233,7 +238,7 @@ int main(int argc, char* argv[]) {
     em = utils::ExecutionManager(cm);
 
     utils::EntityConfig proxyConfig = cm.getFuzzer();
-    em.launchEntity(proxyConfig);
+    em.launchEntity(proxyConfig, -1);
 
     while (1)
         ;

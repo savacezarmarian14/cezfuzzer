@@ -9,14 +9,14 @@
 namespace utils {
 
 class ExecutionManager {
-public:
+  public:
     ExecutionManager();
     explicit ExecutionManager(const ConfigurationManager& config);
-    std::optional<pid_t> launchEntity(const EntityConfig& entity);
+    std::optional<pid_t> launchEntity(const EntityConfig& entity, int index);
 
-private:
+  private:
     ConfigurationManager config_;
-    std::vector<char*> buildArgv(const EntityConfig& entity);
+    std::vector<char*>   buildArgv(const EntityConfig& entity);
 };
 
-}  // namespace utils
+} // namespace utils
