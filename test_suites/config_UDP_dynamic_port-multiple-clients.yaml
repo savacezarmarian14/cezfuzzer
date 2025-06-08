@@ -9,42 +9,42 @@ entities:
   udp_primary:
     role: receiver
     protocol: udp
-    ip: 192.168.1.11
+    ip: 192.168.1.10
     port: 5000
     fuzzed: true
     exec_with: ''
     binary_path: ./build/tests/vuln-udp-dynamic-port-entity/server_primary
     args: []
     destinations:
-    - ip: 192.168.1.10
+    - ip: 192.168.1.20
       port: -1
-    - ip: 192.168.1.12
+    - ip: 192.168.1.30
       port: -1
   udp_client:
     role: sender
     protocol: udp
-    ip: 192.168.1.10
+    ip: 192.168.1.20
     port: -1
     fuzzed: true
     exec_with: ''
     binary_path: ./build/tests/vuln-udp-dynamic-port-entity/client_dynamic
     args:
-    - 192.168.1.11
+    - 192.168.1.10
     destinations:
-    - ip: 192.168.1.11
+    - ip: 192.168.1.10
       port: 5000
   udp_client2:
     role: sender
     protocol: udp
-    ip: 192.168.1.12
+    ip: 192.168.1.30
     port: -1
     fuzzed: true
     exec_with: ''
     binary_path: ./build/tests/vuln-udp-dynamic-port-entity/client_dynamic
     args:
-    - 192.168.1.11
+    - 192.168.1.10
     destinations:
-    - ip: 192.168.1.11
+    - ip: 192.168.1.10
       port: 5000
   fuzzer_1:
     role: fuzzer

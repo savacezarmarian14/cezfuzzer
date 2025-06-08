@@ -40,4 +40,4 @@ entities:
     tcp_redirections:
     - server_ip: 192.168.1.10
       server_port: 12345
-      proxy_port: 42665
+      proxy_port: 34351

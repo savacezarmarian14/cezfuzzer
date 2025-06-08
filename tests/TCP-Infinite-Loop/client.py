@@ -10,8 +10,18 @@ def start_client():
         while True:
             message = b"[Client] Hello"
             s.sendall(message)
-            data = s.recv(1024)
-            print(f"[Client] Received: {data.decode()}")
+
+            # Recv loop until server closes connection or no more data
+            chunks = []
+            while True:
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                if len(chunk) < 4096:
+                    break  # optional: assume server sent full message
+            full_data = b''.join(chunks)
+            print(f"[Client] Received: {full_data.decode(errors='replace')}")
 
 if __name__ == "__main__":
     start_client()

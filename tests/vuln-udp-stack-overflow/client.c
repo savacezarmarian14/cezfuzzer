@@ -40,9 +40,9 @@ int main(int argc, char* argv[])
     }
     server_addr.sin_port = htons(server_port);
 
-    // 3. Trimite 10 mesaje “sigure” către server
-    for (int i = 1; i <= NUM_MESSAGES; i++) {
+    for (int i = 0;; i++) {
         char message[MESSAGE_MAXLEN];
+
         // Construit simplu, mesajul “Mesaj_i”
         snprintf(message, sizeof(message), "Mesaj_%d", i);
 

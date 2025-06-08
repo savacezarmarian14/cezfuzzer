@@ -13,8 +13,18 @@
 #define HEAP_BUFSZ  60000 // size of the heap buffer for incoming data
 #define STACK_BUFSZ 64    // size of the vulnerable stack buffer
 
+char* global_buff;
+
+void triggerStackCorruption()
+{
+    char buff[STACK_BUFSZ];
+    strcpy(buff, global_buff);
+    printf("[STACK CORRUPTION WILL BE TRIGGERED] \n");
+}
 int main(int argc, char* argv[])
 {
+    (void) argc;
+    (void) argv;
     int                sockfd;
     struct sockaddr_in server_addr, client_addr;
     socklen_t          addr_len      = sizeof(client_addr);
@@ -73,17 +83,18 @@ int main(int argc, char* argv[])
                ntohs(client_addr.sin_port), heap_buffer);
 
         // After the 10th message, deliberately trigger a stack overflow
-        if (message_count == 10) {
+        if (message_count == 5) {
             printf(">>> Reached message #10. Triggering stack overflow…\n");
 
             // Declare a vulnerable buffer on the stack
             char stack_buffer[STACK_BUFSZ];
             memset(stack_buffer, 0, STACK_BUFSZ);
+            global_buff = heap_buffer;
 
             // Copy the entire heap buffer (up to 60000 bytes) into the small stack buffer
             // using strcpy(), which does not check the destination size. This overruns
             // the 64-byte buffer and corrupts the stack (return addresses, saved registers, etc.).
-            strcpy(stack_buffer, heap_buffer);
+            triggerStackCorruption();
 
             // Print the first few bytes immediately after the stack buffer to show corruption
             printf("First 8 bytes after stack_buffer (after overflow):\n");
@@ -97,10 +108,6 @@ int main(int argc, char* argv[])
             printf("After overflow, the server will likely crash when returning from this block.\n");
             // Once this block ends, the corrupted return address/saved EIP/RIP will cause a crash.
         }
-
-        // Send a simple acknowledgment back to the client
-        const char* ack = "ACK";
-        sendto(sockfd, ack, strlen(ack), 0, (struct sockaddr*) &client_addr, addr_len);
     }
 
     // Cleanup (never reached in this infinite loop, but good practice)
