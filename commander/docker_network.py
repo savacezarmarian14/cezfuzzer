@@ -7,7 +7,6 @@ def create_docker_network(net_cfg):
     subnet = net_cfg.get("subnet")
     gateway = net_cfg.get("gateway")
 
-    # Verifică dacă există deja rețeaua
     r = subprocess.run([
         "docker", "network", "ls", "--filter", f"name=^{name}$", "--format", "{{.Name}}"
     ], capture_output=True, text=True)
@@ -17,7 +16,6 @@ def create_docker_network(net_cfg):
             log_error(f"Failed to remove network {name}")
         log_success(f"Removed existing network: {name}")
 
-    # Creează rețeaua
     log_info(f"Creating network '{name}' (subnet {subnet}, gateway {gateway})...")
     if subprocess.run([
         "docker", "network", "create", "--subnet", subnet, "--gateway", gateway, name

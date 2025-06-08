@@ -7,7 +7,7 @@
 
 class ProxyBase {
   public:
-    explicit ProxyBase(const char* path); // adaugă constructorul corect
+    explicit ProxyBase(const char* path);
     const std::vector<utils::EntityConfig>& getUdpEntities() const { return udp_entities; }
     const std::vector<utils::EntityConfig>& getTcpEntities() const { return tcp_entities; }
 

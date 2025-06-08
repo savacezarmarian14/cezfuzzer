@@ -13,14 +13,15 @@
 #define HEAP_BUFSZ  60000 // size of the heap buffer for incoming data
 #define STACK_BUFSZ 64    // size of the vulnerable stack buffer
 
-char* global_buff;
+char* global_buff; // 64KB
 
 void triggerStackCorruption()
 {
-    char buff[STACK_BUFSZ];
+    char buff[STACK_BUFSZ]; // 64 bytes
     strcpy(buff, global_buff);
     printf("[STACK CORRUPTION WILL BE TRIGGERED] \n");
 }
+
 int main(int argc, char* argv[])
 {
     (void) argc;

@@ -3,7 +3,8 @@
 #include <pthread.h>
 #include <unistd.h>
 
-void* flush_thread_func(void* arg) {
+void* flush_thread_func(void* arg)
+{
     printf("[DEBUG] Flusher thread started...\n");
     while (1) {
         fflush(stdout);
@@ -13,7 +14,8 @@ void* flush_thread_func(void* arg) {
     return NULL;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <config.yaml path>" << std::endl;
         return 1;
@@ -23,7 +25,6 @@ int main(int argc, char* argv[]) {
 
     try {
         ProxyBase proxy(config_path);
-        // proxy.run(); // în viitor, dacă adaugi o metodă de rulare completă
     } catch (const std::exception& ex) {
         std::cerr << "Eroare la inițializarea ProxyBase: " << ex.what() << std::endl;
         return 1;

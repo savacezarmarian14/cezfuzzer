@@ -19,7 +19,7 @@ void start_flusher_thread()
     if (ret != 0) {
         perror("[ERROR] pthread_create (flush thread)");
     } else {
-        pthread_detach(flush_thread); // rulează în fundal fără să aștepți
+        pthread_detach(flush_thread);
     }
 }
 
@@ -193,7 +193,6 @@ ssize_t recv_message(int sockfd, void* buffer)
     size_t len;
     char*  buff = (char*) &len;
 
-    // 1. Primește lungimea
     while (bytes_received < total_bytes) {
         ret = recv(sockfd, buff + bytes_received, total_bytes - bytes_received, 0);
         if (ret <= 0) {
@@ -203,13 +202,11 @@ ssize_t recv_message(int sockfd, void* buffer)
         bytes_received += ret;
     }
 
-    // 2. Verifică dacă e peste limită
     if (len > MAX_MSG_SIZE) {
         fprintf(stderr, "[ERROR] mesaj prea mare (%zu bytes)\n", len);
         return -1;
     }
 
-    // 3. Primește mesajul în bufferul static
     bytes_received = 0;
     total_bytes    = len;
     buff           = (char*) buffer;

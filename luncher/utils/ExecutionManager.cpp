@@ -24,7 +24,7 @@ std::optional<pid_t> ExecutionManager::launchEntity(const EntityConfig& entity, 
     if (pid == 0) {
         // Child process
         std::string log_path = "/tmp/logs/" + entity.name + "_" + std::to_string(index) + ".log";
-        mkdir("/tmp/logs", 0755); // creează folderul dacă nu există
+        mkdir("/tmp/logs", 0755);
 
         int fd = open(log_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd < 0) {
@@ -53,7 +53,6 @@ std::optional<pid_t> ExecutionManager::launchEntity(const EntityConfig& entity, 
         new_argv.push_back(nullptr);
         execvp(new_argv[0], new_argv.data());
 
-        // Dacă exec eșuează
         perror("[ERROR] execvp()");
         exit(EXIT_FAILURE);
     }
@@ -65,7 +64,6 @@ std::optional<pid_t> ExecutionManager::launchEntity(const EntityConfig& entity, 
         printf("  argv[%zu]: %s\n", i, argv[i]);
     }
 
-    // Părinte
     std::cout << "[INFO] Launched " << entity.name << " (PID " << pid << ")\n";
     return pid;
 }

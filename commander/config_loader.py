@@ -44,7 +44,6 @@ def normalize_udp_ports(yaml_path):
         else:
             ip_to_port[ip] = port
 
-    # Completăm porturile lipsă în destinations
     for name, entity in entities.items():
         if entity.get("protocol") != "udp":
             continue

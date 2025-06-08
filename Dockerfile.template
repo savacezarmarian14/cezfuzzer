@@ -17,14 +17,10 @@ RUN apt-get update && \
         nano && \
     apt-get clean
 
-# Setare director de lucru
 WORKDIR /app
 
-# Copiere cod sursă
 COPY . /app
 
-# Scriptul de entrypoint (va genera regulile iptables & tproxy)
 # <ENTRYPOINT>
 
-# Comanda implicită (va fi suprascrisă din commander.py)
 # <EXEC_COMMAND>

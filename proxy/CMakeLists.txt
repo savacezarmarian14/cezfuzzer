@@ -1,7 +1,6 @@
-# Colectează toate fișierele cpp/hpp
 file(GLOB_RECURSE PROXY_SRC src/*.cpp)
 file(GLOB_RECURSE PROXY_HEADERS inc/*.hpp)
-file(GLOB_RECURSE PROXY_SRC src/*.cpp lib/*.cpp)  # adaugă lib/*.cpp
+file(GLOB_RECURSE PROXY_SRC src/*.cpp lib/*.cpp)
 file(GLOB_RECURSE PROXY_HEADERS inc/*.hpp lib/*.hpp)
 
 # Executabilul principal

@@ -130,7 +130,7 @@ void* UDPHandler::recvThreadEntry(void* arg)
     FuzzerCore& fuzzer  = handler->fuzzer;
 
     char               buffer[4096] = {0};
-    struct sockaddr_in src_addr {};
+    struct sockaddr_in src_addr{};
     socklen_t          addrlen = sizeof(src_addr);
 
     std::cout << "[TYPE] [RECV THREAD] Listening on FD " << recv_sock << std::endl;
@@ -152,7 +152,6 @@ void* UDPHandler::recvThreadEntry(void* arg)
         int         target_port = -1;
         int         send_sock   = -1;
 
-        // Determinăm direcția (A→B sau B→A) și setăm target_ip/target_port/send_sock
         if (recv_sock == conn->getRecvSockFromEntityA()) {
             send_sock   = conn->getSendSockToEntityB();
             target_ip   = conn->getEntityBIP();
@@ -183,17 +182,11 @@ void* UDPHandler::recvThreadEntry(void* arg)
         std::cout << "[TYPE] [RECV THREAD] Forwarding " << len << " bytes from " << src_ip << ":" << src_port << " to "
                   << target_ip << ":" << target_port << std::endl;
 
-        // === AICI înserezi apelul la fuzzer ===
-        // 2) Copiem datele primite într-un buffer temporar (uint8_t*),
-        //    apoi apelăm, de exemplu, postFuzzing:
         size_t   fuzzedSize = 0;
         uint8_t* fuzzedBuf =
             fuzzer.postFuzzing(reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(len), fuzzedSize);
-        // => acum fuzzedBuf conține ( `[original][mutat de Radamsa]` ),
-        //    iar fuzzedSize este lungimea totală a acestui buffer.
 
-        // 3) Pregătim sockaddr_in pentru destinație și trimitem fuzzedBuf
-        struct sockaddr_in dst_addr {};
+        struct sockaddr_in dst_addr{};
         dst_addr.sin_family = AF_INET;
         dst_addr.sin_port   = htons(target_port);
         inet_pton(AF_INET, target_ip.c_str(), &dst_addr.sin_addr);
@@ -209,11 +202,9 @@ void* UDPHandler::recvThreadEntry(void* arg)
             std::cout << "[TYPE] [RECV THREAD] Sent " << sent << " bytes (fuzzed) to " << target_ip << ":"
                       << target_port << std::endl;
         }
-        // 4) Dezalocăm bufferul fuzz-uit
         free(fuzzedBuf);
         // ==============================================
-
-    } // end while
+    }
 
     std::cout << "[TYPE] [RECV THREAD] Closing recv socket FD: " << recv_sock << std::endl;
     close(recv_sock);
@@ -231,7 +222,7 @@ void* UDPHandler::sendThreadEntry(void* arg)
     FuzzerCore& fuzzer  = handler->fuzzer;
 
     char               buffer[4096] = {0};
-    struct sockaddr_in src_addr {};
+    struct sockaddr_in src_addr{};
     socklen_t          addrlen = sizeof(src_addr);
 
     std::cout << "[SEND-THREAD] Listening on FD " << send_sock << (isFromA ? " (from A side)" : " (from B side)")
@@ -302,7 +293,7 @@ void* UDPHandler::sendThreadEntry(void* arg)
             fuzzer.postFuzzing(reinterpret_cast<const uint8_t*>(buffer), static_cast<size_t>(len), fuzzedSize);
         // =============================================
 
-        struct sockaddr_in dst_addr {};
+        struct sockaddr_in dst_addr{};
         dst_addr.sin_family = AF_INET;
         dst_addr.sin_port   = htons(dst_port);
         inet_pton(AF_INET, dst_ip.c_str(), &dst_addr.sin_addr);
@@ -351,19 +342,16 @@ void UDPHandler::startSendThreads()
         socklen_t   len = sizeof(sock_addr);
         if (getsockname(sock, (sockaddr*) &sock_addr, &len) < 0) {
             perror("[ERROR] getsockname");
-            isFromA = false; // fallback, dar ideal ar fi să nu ajungem aici
+            isFromA = false;
         } else {
             int bound_port = ntohs(sock_addr.sin_port);
             if (bound_port == conn->getEntityASendPort()) {
-                // Portul pe care proxy-ul ascultă ca să trimită spre A,
-                // a primit un pachet ⇒ pachet de la A spre B
                 isFromA = true;
             } else {
                 isFromA = false;
             }
         }
 
-        // Pregătim argumentele pentru thread
         auto* args = new std::tuple<int, UDPConnection*, bool>(sock, conn, isFromA);
         if (pthread_create(&tid, nullptr, &UDPHandler::sendThreadEntry, args) != 0) {
             perror("[ERROR] pthread_create (sendThreadEntry) failed");
