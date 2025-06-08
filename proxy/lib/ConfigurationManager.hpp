@@ -38,6 +38,12 @@ struct Connection {
     int         send_sock_to_entityB   = -1;
 };
 
+struct TCPRedirection {
+    std::string server_ip;
+    uint16_t    server_port;
+    uint16_t    proxy_port;
+};
+
 struct EntityConfig {
     std::string              name;
     std::string              role;
@@ -50,9 +56,10 @@ struct EntityConfig {
     std::vector<std::string> args;
 
     // Optional
-    std::vector<Destination> destinations;
-    std::optional<ConnectTo> connect_to;
-    std::vector<Connection>  connections;
+    std::vector<Destination>    destinations;
+    std::optional<ConnectTo>    connect_to;
+    std::vector<Connection>     connections;
+    std::vector<TCPRedirection> tcp_redirections;
 };
 
 struct GeneralConfig {

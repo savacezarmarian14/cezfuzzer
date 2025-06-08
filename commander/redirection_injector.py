@@ -70,3 +70,72 @@ def inject_fuzzer_redirections(config_path):
         yaml.safe_dump(config, f, sort_keys=False, default_flow_style=False)
 
     log_success(f"Injected {len(connections)} bidirectional connections into config.")
+
+
+def inject_tcp_redirections(config_path):
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+
+    fuzzer = next(
+        (cfg for cfg in config["entities"].values() if cfg.get("role") == "fuzzer"),
+        None
+    )
+
+    if not fuzzer:
+        log_error("No fuzzer entity found in config.")
+        sys.exit(1)
+
+    used_ports = set()
+    # Include already used ports in fuzzer (UDP connections, maybe pre-injected)
+    if "connections" in fuzzer:
+        for conn in fuzzer["connections"]:
+            used_ports.update([
+                conn["entityA_proxy_port_recv"],
+                conn["entityA_proxy_port_send"],
+                conn["entityB_proxy_port_recv"],
+                conn["entityB_proxy_port_send"]
+            ])
+
+    def random_port():
+        while True:
+            p = random.randint(20000, 60000)
+            if p not in used_ports:
+                used_ports.add(p)
+                return p
+
+    tcp_redirections = []
+    seen_servers = set()
+
+    for name, entity in config["entities"].items():
+        if entity.get("role") != "server":
+            continue
+        if entity.get("protocol", "udp").lower() != "tcp":
+            continue
+
+        server_ip = entity.get("ip")
+        server_port = entity.get("port", -1)
+
+        if not server_ip or server_port == -1:
+            continue
+
+        key = (server_ip, server_port)
+        if key in seen_servers:
+            continue
+        seen_servers.add(key)
+
+        proxy_port = random_port()
+
+        tcp_redirections.append({
+            "server_ip": server_ip,
+            "server_port": server_port,
+            "proxy_port": proxy_port
+        })
+
+        log_info(f"TCP redirect: {server_ip}:{server_port} → proxy_port {proxy_port}")
+
+    fuzzer["tcp_redirections"] = tcp_redirections
+
+    with open(config_path, "w") as f:
+        yaml.safe_dump(config, f, sort_keys=False, default_flow_style=False)
+
+    log_success(f"Injected {len(tcp_redirections)} TCP redirections into config.")

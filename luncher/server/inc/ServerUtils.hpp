@@ -17,7 +17,8 @@ struct client_list {
     unsigned int        no_clients = 0;
 };
 
-int addNewClient(int sockfd, char clientIP[64], unsigned int clientPORT, struct client_list* list) {
+int addNewClient(int sockfd, char clientIP[64], unsigned int clientPORT, struct client_list* list)
+{
     // Realocă spațiu pentru un client în plus
     struct client_info* new_list =
         (struct client_info*) realloc(list->list, (list->no_clients + 1) * sizeof(struct client_info));
@@ -37,7 +38,6 @@ int addNewClient(int sockfd, char clientIP[64], unsigned int clientPORT, struct 
     ci->clientPORT   = clientPORT;
 
     list->no_clients += 1;
-
     return 0;
 }
 int removeClient(int sockfd);

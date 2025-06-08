@@ -6,31 +6,27 @@ network:
   subnet: 192.168.1.0/24
   gateway: 192.168.1.1
 entities:
-  udp_primary:
-    role: receiver
-    protocol: udp
-    ip: 192.168.1.11
-    port: 5000
-    fuzzed: true
-    exec_with: ''
-    binary_path: ./build/tests/vuln-udp-dynamic-port-entity/server_primary
-    args: []
-    destinations:
-    - ip: 192.168.1.10
-      port: -1
-  udp_client:
-    role: sender
-    protocol: udp
-    ip: 192.168.1.10
+  tcp_client:
+    role: client
+    protocol: tcp
+    ip: 192.168.1.20
     port: -1
     fuzzed: true
-    exec_with: ''
-    binary_path: ./build/tests/vuln-udp-dynamic-port-entity/client_dynamic
-    args:
-    - 192.168.1.11
-    destinations:
-    - ip: 192.168.1.11
-      port: 5000
+    binary_path: tests/TCP-Infinite-Loop/client.py
+    args: []
+    exec_with: python3
+    connect_to:
+      ip: 192.168.1.10
+      port: 12345
+  tcp_server:
+    role: server
+    protocol: tcp
+    ip: 192.168.1.10
+    port: 12345
+    fuzzed: true
+    binary_path: tests/TCP-Infinite-Loop/server.py
+    exec_with: python3
+    args: []
   fuzzer_1:
     role: fuzzer
     ip: 192.168.1.40
@@ -40,12 +36,8 @@ entities:
     binary_path: ./build/proxy/proxy_fuzzer
     args:
     - config.yaml
-    connections:
-    - entityA_ip: 192.168.1.11
-      entityA_port: 5000
-      entityA_proxy_port_recv: 35117
-      entityA_proxy_port_send: 21355
-      entityB_ip: 192.168.1.10
-      entityB_port: -1
-      entityB_proxy_port_recv: 35222
-      entityB_proxy_port_send: 53025
+    connections: []
+    tcp_redirections:
+    - server_ip: 192.168.1.10
+      server_port: 12345
+      proxy_port: 22571

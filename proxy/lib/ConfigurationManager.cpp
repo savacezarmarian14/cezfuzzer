@@ -6,7 +6,8 @@ namespace utils {
 
 ConfigurationManager::ConfigurationManager(const std::string& config_path) : path_(config_path) {}
 
-bool ConfigurationManager::parse() {
+bool ConfigurationManager::parse()
+{
     try {
         YAML::Node config = YAML::LoadFile(path_);
 
@@ -75,6 +76,15 @@ bool ConfigurationManager::parse() {
                     }
                 }
 
+                if (data["tcp_redirections"]) {
+                    for (const auto& cnode : data["tcp_redirections"]) {
+                        TCPRedirection c;
+                        c.server_ip   = cnode["server_ip"].as<std::string>();
+                        c.server_port = cnode["server_port"].as<int>();
+                        c.proxy_port  = cnode["proxy_port"].as<int>();
+                        entity.tcp_redirections.push_back(c);
+                    }
+                }
                 entities_.push_back(entity);
                 if (entity.role == "fuzzer") {
                     fuzzer_ = entity;
@@ -90,19 +100,23 @@ bool ConfigurationManager::parse() {
     return true;
 }
 
-GeneralConfig ConfigurationManager::getGeneralConfig() const {
+GeneralConfig ConfigurationManager::getGeneralConfig() const
+{
     return general_;
 }
 
-NetworkConfig ConfigurationManager::getNetworkConfig() const {
+NetworkConfig ConfigurationManager::getNetworkConfig() const
+{
     return network_;
 }
 
-std::vector<EntityConfig> ConfigurationManager::getEntities() const {
+std::vector<EntityConfig> ConfigurationManager::getEntities() const
+{
     return entities_;
 }
 
-std::vector<EntityConfig> ConfigurationManager::getEntities(const char* IP) {
+std::vector<EntityConfig> ConfigurationManager::getEntities(const char* IP)
+{
     std::vector<EntityConfig> result;
     for (const auto& entity : entities_) {
         if (strcmp(entity.ip.c_str(), IP) == 0) {
@@ -112,7 +126,8 @@ std::vector<EntityConfig> ConfigurationManager::getEntities(const char* IP) {
     return result;
 }
 
-EntityConfig ConfigurationManager::getFuzzer() {
+EntityConfig ConfigurationManager::getFuzzer()
+{
     EntityConfig result;
     for (const auto& entity : entities_) {
         if (entity.role == "fuzzer") {

@@ -1,6 +1,6 @@
 import argparse
 from .utils import CONFIG_PATH, LAUNCHER_PORT
-from .redirection_injector import inject_fuzzer_redirections
+from .redirection_injector import inject_fuzzer_redirections, inject_tcp_redirections
 from .config_loader import load_config, normalize_udp_ports
 from .docker_network import create_docker_network
 from .docker_build import generate_dockerfile, generate_all_dockerfiles
@@ -19,6 +19,8 @@ def main():
 
     # 1. Injectează redirecțiile pentru fuzzer
     inject_fuzzer_redirections(args.config)
+    inject_tcp_redirections(args.config)
+
 
     # 2. Încarcă configul
     cfg = load_config(args.config)
@@ -29,6 +31,7 @@ def main():
     # 5. Generează Dockerfile-uri + entrypoint-uri
     generate_all_dockerfiles(cfg.get("entities", {}), args.template)
     # 6. Build + run containere
+
     launch_all_entities(config=cfg, standby=args.standby)
 
     # 7. Pornește launcher-ele

@@ -56,8 +56,11 @@ void* handle_client_connection(void* arg)
         printf("[INFO] Message: %s\n", buffer);
 
         if (strncmp(buffer, CRASH, strlen(CRASH)) == 0) {
-            strcpy(buffer, RESTART);
-            send_message(client_fd, buffer, strlen(buffer));
+            pthread_mutex_lock(&_notificatioMutex);
+            _notificationMessage = RESTART;
+            _notification        = true;
+            pthread_cond_signal(&_notificationCond);
+            pthread_mutex_unlock(&_notificatioMutex);
         }
 
         sleep(1);
@@ -88,6 +91,7 @@ void* listen_thread_func(void* arg)
         printf("[INFO] New connection %s:%d\n", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
 
         addNewClient(client_fd, inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port), &client_list);
+        client_fd_list.push_back(client_fd);
 
         printf("[INFO] Client added to client list!\n");
 
@@ -219,9 +223,36 @@ int init_server()
     return sockfd;
 }
 
+void stop_process(pid_t pid)
+{
+    int status;
+    if (kill(pid, SIGKILL) == 0) {
+        printf("Process %d was terminated.\n", pid);
+    } else {
+        printf("Failed to terminate process %d.\n", pid);
+    }
+
+    if (waitpid(pid, &status, 0) < 0) {
+        printf("[ERROR] Error waiting child process...\n");
+    } else {
+        if (WIFEXITED(status)) {
+            printf("[INFO] Child exited normally with code %d\n", WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+            printf("[INFO] Child was terminated by signal %d\n", WTERMSIG(status));
+        } else if (WIFSTOPPED(status)) {
+            printf("[INFO] Child was stopped by signal %d\n", WSTOPSIG(status));
+        } else if (WIFCONTINUED(status)) {
+            printf("[INFO] Child was resumed by SIGCONT\n");
+        } else {
+            printf("[INFO] Unknown child status: %d\n", status);
+        }
+    }
+}
+
 int main(int argc, char* argv[])
 {
-    int ret = 0;
+    int                  ret = 0;
+    std::optional<pid_t> proxyPid;
 
     start_flusher_thread();
 
@@ -238,10 +269,29 @@ int main(int argc, char* argv[])
     em = utils::ExecutionManager(cm);
 
     utils::EntityConfig proxyConfig = cm.getFuzzer();
-    em.launchEntity(proxyConfig, -1);
 
-    while (1)
-        ;
+    proxyPid = em.launchEntity(proxyConfig, -1);
+
+    while (1) {
+        pthread_mutex_lock(&_notificatioMutex);
+        while (_notification == false) {
+            pthread_cond_wait(&_notificationCond, &_notificatioMutex);
+        }
+
+        printf("[INFO] Notification received...\n");
+        if (_notificationMessage == RESTART) {
+            stop_process(proxyPid.value());
+            proxyPid = em.launchEntity(proxyConfig, -1);
+            printf("[INFO] Proxy restarted...\n");
+            for (auto& clientfd : client_fd_list) {
+                send_message(clientfd, RESTART, sizeof(RESTART));
+                printf("\t[INFO] Sent RESTART message to client...\n");
+            }
+            _notificationMessage.clear();
+            _notification = false;
+            pthread_mutex_unlock(&_notificatioMutex);
+        }
+    };
     // TODO: De revizuit commander.py pentru a porni serverul care va porni proxiul si clientul care va porni unul din
     // capete
     // TODO: De verificat logica de logare
